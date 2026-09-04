@@ -290,6 +290,9 @@ class GatewaySettingTab extends PluginSettingTab {
     const xdfPluginIds = new Set(XDF_PLUGINS.map(p => p.id));
 
     for (const group of this.plugin.settings.groups) {
+      // 跳过 XDF 教学套件分组（已在上方单独显示）
+      if (group.id === "xdf-suite") continue;
+
       const groupEl = allPluginsContainer.createDiv({ cls: "xdf-group-section" });
       const header = groupEl.createEl("details", { cls: "xdf-folder" });
       header.open = true;
