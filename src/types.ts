@@ -7,6 +7,7 @@ export interface XdfPlugin {
   id: string;
   name: string;
   repo: string;
+  pinned?: boolean; // 是否置顶
 }
 
 /** 分组配置 */

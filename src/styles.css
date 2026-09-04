@@ -49,15 +49,32 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: var(--background-secondary);
   border-radius: 6px;
   border: 1px solid var(--background-modifier-border);
 }
 
-.xdf-plugin-name {
+.xdf-plugin-row.is-pinned {
+  border-left: 3px solid var(--interactive-accent);
+}
+
+.xdf-plugin-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.xdf-plugin-name {
   font-weight: 500;
+  font-size: 14px;
+}
+
+.xdf-plugin-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .xdf-plugin-id {
@@ -71,25 +88,40 @@
   font-size: 12px;
 }
 
-.xdf-plugin-status {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 10px;
+.xdf-plugin-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
-.xdf-plugin-status.is-enabled {
+.xdf-toggle-btn {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.xdf-toggle-btn.is-enabled {
   background: var(--background-modifier-success);
   color: var(--text-success);
 }
 
-.xdf-plugin-status.is-disabled {
+.xdf-toggle-btn.is-enabled:hover {
   background: var(--background-modifier-error);
   color: var(--text-error);
 }
 
-.xdf-plugin-actions {
-  display: flex;
-  gap: 6px;
+.xdf-toggle-btn.is-disabled {
+  background: var(--background-modifier-error);
+  color: var(--text-error);
+}
+
+.xdf-toggle-btn.is-disabled:hover {
+  background: var(--background-modifier-success);
+  color: var(--text-success);
 }
 
 /* 分组区域 */

@@ -67,7 +67,7 @@ export default class XdfGatewayPlugin extends Plugin {
     this.organizer.disable();
   }
 
-  private async runUpdateCheck(): Promise<void> {
+  async runUpdateCheck(): Promise<void> {
     new Notice("[XDF Gateway] 正在检查插件更新...");
     try {
       const updates = await this.updater.checkForUpdates();
@@ -204,20 +204,64 @@ class GatewaySettingTab extends PluginSettingTab {
 
   /** 插件管理 Tab */
   private renderPluginsTab(containerEl: HTMLElement): void {
-    // XDF 插件区域
+    const manifests = (this.app as any).plugins?.manifests || {};
+    const enabledPlugins = (this.app as any).plugins?.enabledPlugins || new Set();
+    const plugins = (this.app as any).plugins?.plugins || {};
+
+    // XDF 插件区域（置顶）
     containerEl.createEl("h3", { text: "XDF 教学套件" });
 
     const xdfContainer = containerEl.createDiv({ cls: "xdf-plugin-list" });
-    for (const xdfPlugin of XDF_PLUGINS) {
-      const row = xdfContainer.createDiv({ cls: "xdf-plugin-row" });
-      row.createSpan({ text: xdfPlugin.name, cls: "xdf-plugin-name" });
-      row.createSpan({ text: xdfPlugin.id, cls: "xdf-plugin-id" });
+    // 置顶插件排在前面
+    const sortedPlugins = [...XDF_PLUGINS].sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return 0;
+    });
+    for (const xdfPlugin of sortedPlugins) {
+      const m = manifests[xdfPlugin.id] as any;
+      const isEnabled = enabledPlugins.has(xdfPlugin.id);
+      const description = m?.description || "";
 
+      const row = xdfContainer.createDiv({ cls: `xdf-plugin-row ${xdfPlugin.pinned ? "is-pinned" : ""}` });
+
+      // 左侧：名称 + 描述
+      const info = row.createDiv({ cls: "xdf-plugin-info" });
+      info.createSpan({ text: xdfPlugin.name, cls: "xdf-plugin-name" });
+      if (description) {
+        info.createSpan({ text: description, cls: "xdf-plugin-desc" });
+      }
+
+      // 右侧：操作按钮
       const actions = row.createDiv({ cls: "xdf-plugin-actions" });
-      actions.createEl("button", {
+
+      // 启用/禁用开关
+      const toggleBtn = actions.createEl("button", {
+        text: isEnabled ? "已启用" : "已禁用",
+        cls: `xdf-toggle-btn ${isEnabled ? "is-enabled" : "is-disabled"}`,
+      });
+      toggleBtn.addEventListener("click", async () => {
+        try {
+          if (isEnabled) {
+            await plugins.disablePlugin(xdfPlugin.id);
+            new Notice(`[XDF Gateway] 已禁用 ${xdfPlugin.name}`);
+          } else {
+            await plugins.enablePlugin(xdfPlugin.id);
+            new Notice(`[XDF Gateway] 已启用 ${xdfPlugin.name}`);
+          }
+          this.display();
+        } catch (error) {
+          console.error(`[XDF Gateway] 切换插件状态失败: ${xdfPlugin.id}`, error);
+          new Notice(`[XDF Gateway] 操作失败，请查看控制台`);
+        }
+      });
+
+      // 更新按钮
+      const updateBtn = actions.createEl("button", {
         text: "更新",
         cls: "mod-cta",
-      }).addEventListener("click", () => {
+      });
+      updateBtn.addEventListener("click", () => {
         void this.plugin.updater.updatePlugin(xdfPlugin.id);
       });
     }
@@ -232,12 +276,9 @@ class GatewaySettingTab extends PluginSettingTab {
           .onClick(() => { void this.plugin.runUpdateCheck(); }),
       );
 
-    // 全部插件列表（按分组）
-    containerEl.createEl("h3", { text: "全部插件（按分组）" });
+    // 插件分组
+    containerEl.createEl("h3", { text: "插件分组" });
     const allPluginsContainer = containerEl.createDiv({ cls: "xdf-all-plugins" });
-
-    const manifests = (this.app as any).plugins?.manifests || {};
-    const enabledPlugins = (this.app as any).plugins?.enabledPlugins || new Set();
 
     for (const group of this.plugin.settings.groups) {
       const groupEl = allPluginsContainer.createDiv({ cls: "xdf-group-section" });
@@ -263,14 +304,39 @@ class GatewaySettingTab extends PluginSettingTab {
           : keywords.some((kw) => name.includes(kw));
 
         if (isMatch) {
-          const row = list.createDiv({ cls: "xdf-plugin-row" });
-          row.createSpan({ text: m.name, cls: "xdf-plugin-name" });
-          row.createSpan({ text: `v${m.version}`, cls: "xdf-plugin-version" });
-
           const isEnabled = enabledPlugins.has(pluginId);
-          const status = row.createSpan({
+          const description = m?.description || "";
+
+          const row = list.createDiv({ cls: "xdf-plugin-row" });
+
+          // 左侧：名称 + 描述
+          const info = row.createDiv({ cls: "xdf-plugin-info" });
+          info.createSpan({ text: m.name, cls: "xdf-plugin-name" });
+          info.createSpan({ text: `v${m.version}`, cls: "xdf-plugin-version" });
+          if (description) {
+            info.createSpan({ text: description, cls: "xdf-plugin-desc" });
+          }
+
+          // 右侧：启用/禁用开关
+          const actions = row.createDiv({ cls: "xdf-plugin-actions" });
+          const toggleBtn = actions.createEl("button", {
             text: isEnabled ? "已启用" : "已禁用",
-            cls: `xdf-plugin-status ${isEnabled ? "is-enabled" : "is-disabled"}`,
+            cls: `xdf-toggle-btn ${isEnabled ? "is-enabled" : "is-disabled"}`,
+          });
+          toggleBtn.addEventListener("click", async () => {
+            try {
+              if (isEnabled) {
+                await plugins.disablePlugin(pluginId);
+                new Notice(`[XDF Gateway] 已禁用 ${m.name}`);
+              } else {
+                await plugins.enablePlugin(pluginId);
+                new Notice(`[XDF Gateway] 已启用 ${m.name}`);
+              }
+              this.display();
+            } catch (error) {
+              console.error(`[XDF Gateway] 切换插件状态失败: ${pluginId}`, error);
+              new Notice(`[XDF Gateway] 操作失败，请查看控制台`);
+            }
           });
         }
       }

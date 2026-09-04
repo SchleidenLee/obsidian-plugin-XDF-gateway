@@ -25,6 +25,7 @@ export interface GatewaySettings {
 
 /** XDF 预设插件列表 */
 export const XDF_PLUGINS: XdfPlugin[] = [
+  { id: "xdf-gateway", name: "XDF Gateway", repo: "SchleidenLee/obsidian-plugin-XDF-gateway", pinned: true },
   { id: "xdf-base", name: "XDF Base", repo: "SchleidenLee/obsidian-plugin-XDF-base" },
   { id: "xdf-classtracker", name: "XDF ClassTracker", repo: "SchleidenLee/obsidian-plugin-XDF-ClassTracker" },
   { id: "xdf-feedback-assistant", name: "XDF Feedback Assistant", repo: "SchleidenLee/obsidian-plugin-XDF-Feedback-Assistant" },
