@@ -36,12 +36,12 @@ export class GitHubResponseError extends Error {
   public readonly status: number;
   public readonly headers: Record<string, string>;
 
-  constructor(error: Error) {
+  constructor(error: Error, status?: number, headers?: Record<string, string>) {
     super(`GitHub API 错误: ${error.message}`);
     this.name = "GitHubResponseError";
     const ghError = error as GitHubResponseError;
-    this.status = ghError.status ?? 400;
-    this.headers = ghError.headers ?? {};
+    this.status = status ?? ghError.status ?? 400;
+    this.headers = headers ?? ghError.headers ?? {};
   }
 }
 
@@ -56,6 +56,34 @@ function normalizeHeaders(
       return acc;
     },
     {} as Record<string, string>,
+  );
+}
+
+function readRateLimitHeader(
+  headers: Record<string, string>,
+  name: string,
+): number {
+  const value = parseInt(headers[name] ?? "0", 10);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function errorFromFailedResponse(
+  response: RequestUrlResponse,
+  requestUrlValue: string,
+): Error {
+  const headers = normalizeHeaders(response.headers ?? {});
+  if (response.status === 403) {
+    return new GHRateLimitError(
+      readRateLimitHeader(headers, "x-ratelimit-limit"),
+      readRateLimitHeader(headers, "x-ratelimit-remaining"),
+      readRateLimitHeader(headers, "x-ratelimit-reset"),
+      requestUrlValue,
+    );
+  }
+  return new GitHubResponseError(
+    new Error(`HTTP ${response.status}`),
+    response.status,
+    headers,
   );
 }
 
@@ -175,11 +203,22 @@ export async function gitHubRequest(
   // 收集所有错误
   let lastError: Error | null = null;
 
+  const tryRequest = async (
+    url: string,
+  ): Promise<RequestUrlResponse | null> => {
+    const res = await requestUrl({ ...requestOptions, url, throw: false });
+    if (res.status >= 200 && res.status < 300) {
+      setCache(options.url, res);
+      return res;
+    }
+    lastError = errorFromFailedResponse(res, options.url);
+    return null;
+  };
+
   // 1. 先尝试直连
   try {
-    const res = await requestUrl(requestOptions);
-    setCache(options.url, res);
-    return res;
+    const res = await tryRequest(options.url);
+    if (res) return res;
   } catch (error) {
     lastError = error instanceof Error ? error : new Error(String(error));
     // 直连失败，继续试镜像站
@@ -191,9 +230,8 @@ export async function gitHubRequest(
     if (proxyUrl === options.url) continue; // 该镜像站不支持此 URL
 
     try {
-      const res = await requestUrl({ ...requestOptions, url: proxyUrl });
-      setCache(options.url, res);
-      return res;
+      const res = await tryRequest(proxyUrl);
+      if (res) return res;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       continue;
@@ -223,23 +261,32 @@ export async function grabReleaseFromRepository(
     Accept: "application/vnd.github+json",
   };
 
-  const response = await gitHubRequest(
-    { url: apiUrl, headers },
-    settings,
-  );
+  let response: RequestUrlResponse;
+  try {
+    response = await gitHubRequest(
+      { url: apiUrl, headers },
+      settings,
+    );
+  } catch (error) {
+    if (error instanceof GitHubResponseError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 
   if (response.status === 404) return null;
+  if (response.status === 403) {
+    throw errorFromFailedResponse(response, apiUrl);
+  }
+  if (response.status >= 400) {
+    throw errorFromFailedResponse(response, apiUrl);
+  }
 
   const json: unknown = response.json;
-
   const releases: Release[] =
-    version && version !== "latest"
-      ? json && typeof json === "object"
-        ? [json as Release]
-        : []
-      : Array.isArray(json)
-        ? (json as Release[])
-        : [];
+    json && typeof json === "object"
+      ? Array.isArray(json) ? (json as Release[]) : [json as Release]
+      : [];
 
   if (releases.length === 0) return null;
 

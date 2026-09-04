@@ -17,6 +17,7 @@ export default class XdfGatewayPlugin extends Plugin {
   settings!: GatewaySettings;
   updater!: PluginUpdater;
   organizer!: SidebarOrganizer;
+  settingTab: GatewaySettingTab | null = null;
   private updateTimer: number | null = null;
 
   async onload(): Promise<void> {
@@ -46,10 +47,12 @@ export default class XdfGatewayPlugin extends Plugin {
         await this.updater.updateAll(updates);
         this.settings.lastUpdateCheck = Date.now();
         await this.saveSettings();
+        this.refreshSettingTab();
       },
     });
 
-    this.addSettingTab(new GatewaySettingTab(this.app, this));
+    this.settingTab = new GatewaySettingTab(this.app, this);
+    this.addSettingTab(this.settingTab);
 
     if (this.settings.autoUpdate) {
       window.setTimeout(() => { void this.runAutoUpdateCheck(); }, 10000);
@@ -74,20 +77,27 @@ export default class XdfGatewayPlugin extends Plugin {
         notice.setMessage(`[XDF Gateway] 正在检查: ${name} (${current}/${total})`);
       });
 
-      if (updates.length === 0) {
-        notice.setMessage("[XDF Gateway] 所有 XDF 插件均为最新版本。");
+      const toInstall = updates.filter((u) => !u.currentVersion);
+      const toUpdate = updates.filter((u) => u.currentVersion);
+
+      if (toInstall.length === 0 && toUpdate.length === 0) {
+        notice.setMessage("[XDF Gateway] 所有 XDF 插件均已安装且为最新版本。");
         window.setTimeout(() => notice.hide(), 3000);
       } else {
-        const names = updates.map(
-          (u) => `${u.name} (${u.currentVersion} → ${u.latestVersion})`,
-        );
-        notice.setMessage(
-          `[XDF Gateway] 发现 ${updates.length} 个更新:\n${names.join("\n")}\n\n正在更新...`,
-        );
+        const parts: string[] = [];
+        if (toInstall.length > 0) {
+          parts.push(`需要安装: ${toInstall.map((u) => u.name).join("、")}`);
+        }
+        if (toUpdate.length > 0) {
+          parts.push(
+            `需要更新: ${toUpdate.map((u) => `${u.name} (${u.currentVersion} → ${u.latestVersion})`).join("、")}`,
+          );
+        }
+        notice.setMessage(`[XDF Gateway] ${parts.join("\n")}\n\n正在处理...`);
         await this.updater.updateAll(updates, (current, total, name, stage) => {
           notice.setMessage(`[XDF Gateway] ${name}: ${stage} (${current}/${total})`);
         });
-        notice.setMessage("[XDF Gateway] 更新完成！");
+        notice.setMessage("[XDF Gateway] 安装/更新完成！");
         window.setTimeout(() => notice.hide(), 3000);
       }
       this.settings.lastUpdateCheck = Date.now();
@@ -103,9 +113,14 @@ export default class XdfGatewayPlugin extends Plugin {
     try {
       const updates = await this.updater.checkForUpdates();
       if (updates.length > 0) {
+        const toInstall = updates.filter((u) => !u.currentVersion);
+        const toUpdate = updates.filter((u) => u.currentVersion);
+        const parts: string[] = [];
+        if (toInstall.length > 0) parts.push(`${toInstall.length} 个待安装`);
+        if (toUpdate.length > 0) parts.push(`${toUpdate.length} 个待更新`);
         const names = updates.map((u) => u.name).join(", ");
         new Notice(
-          `[XDF Gateway] 发现 ${updates.length} 个插件更新 (${names})，点击 Ribbon 图标一键更新。`,
+          `[XDF Gateway] 发现 ${parts.join("、")} (${names})，点击 Ribbon 图标一键处理。`,
           15000,
         );
       }
@@ -142,6 +157,13 @@ export default class XdfGatewayPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  refreshSettingTab(): void {
+    if (!this.settingTab) return;
+    if (this.settingTab.containerEl.isConnected) {
+      this.settingTab.display();
+    }
   }
 
   async saveSettings(): Promise<void> {
@@ -200,7 +222,7 @@ class GatewaySettingTab extends PluginSettingTab {
 
     switch (this.activeTab) {
       case "plugins":
-        this.renderPluginsTab(contentEl);
+        void this.renderPluginsTab(contentEl);
         break;
       case "tags":
         this.renderTagsTab(contentEl);
@@ -212,10 +234,10 @@ class GatewaySettingTab extends PluginSettingTab {
   }
 
   /** 插件管理 Tab */
-  private renderPluginsTab(containerEl: HTMLElement): void {
+  private async renderPluginsTab(containerEl: HTMLElement): Promise<void> {
     const manifests = (this.app as any).plugins?.manifests || {};
     const enabledPlugins = (this.app as any).plugins?.enabledPlugins || new Set();
-    const plugins = (this.app as any).plugins?.plugins || {};
+    const pluginManager = (this.app as any).plugins;
 
     // XDF 插件区域（置顶）
     containerEl.createEl("h3", { text: "XDF 教学套件" });
@@ -227,9 +249,15 @@ class GatewaySettingTab extends PluginSettingTab {
       if (!a.pinned && b.pinned) return 1;
       return 0;
     });
-    for (const xdfPlugin of sortedPlugins) {
+    // 先并行获取安装状态，避免设置页因串行 await 卡顿
+    const installStates = await Promise.all(
+      sortedPlugins.map((p) => this.plugin.updater.getInstallState(p.id)),
+    );
+
+    for (let i = 0; i < sortedPlugins.length; i++) {
+      const xdfPlugin = sortedPlugins[i];
+      const installState = installStates[i];
       const m = manifests[xdfPlugin.id] as any;
-      const isEnabled = enabledPlugins.has(xdfPlugin.id);
       const description = m?.description || "";
       const isPinned = this.plugin.settings.pinnedPlugins.includes(xdfPlugin.id);
 
@@ -242,7 +270,7 @@ class GatewaySettingTab extends PluginSettingTab {
         info.createSpan({ text: description, cls: "xdf-plugin-desc" });
       }
 
-      // 右侧：Toggle 开关 + 更新按钮
+      // 右侧：Toggle 开关 + 更新/安装按钮
       const actions = row.createDiv({ cls: "xdf-plugin-actions" });
 
       // Toggle 开关
@@ -251,34 +279,53 @@ class GatewaySettingTab extends PluginSettingTab {
         type: "checkbox",
         cls: "xdf-toggle-input",
       });
-      toggleInput.checked = isEnabled;
+      toggleInput.checked = installState === "enabled";
+      if (installState === "not_installed") {
+        toggleInput.disabled = true;
+        toggleInput.checked = false;
+        row.addClass("is-not-installed");
+      }
       toggleLabel.createSpan({ cls: "xdf-toggle-slider" });
 
       toggleInput.addEventListener("change", async () => {
+        const wantEnable = toggleInput.checked;
+        const state = await this.plugin.updater.getInstallState(xdfPlugin.id);
+        if (state === "not_installed") {
+          toggleInput.checked = false;
+          new Notice(`[XDF Gateway] ${xdfPlugin.name} 尚未安装，请先点击「安装」`);
+          return;
+        }
         try {
-          if (toggleInput.checked) {
-            await plugins.enablePlugin(xdfPlugin.id);
+          if (wantEnable) {
+            await pluginManager.enablePluginAndSave(xdfPlugin.id);
             new Notice(`[XDF Gateway] 已启用 ${xdfPlugin.name}`);
           } else {
-            await plugins.disablePlugin(xdfPlugin.id);
+            await pluginManager.disablePluginAndSave(xdfPlugin.id);
             new Notice(`[XDF Gateway] 已禁用 ${xdfPlugin.name}`);
           }
-          this.display();
         } catch (error) {
+          toggleInput.checked = !wantEnable;
           console.error(`[XDF Gateway] 切换插件状态失败: ${xdfPlugin.id}`, error);
           new Notice(`[XDF Gateway] 操作失败，请查看控制台`);
         }
       });
 
-      // 更新按钮
+      // 更新/安装按钮（进度 Notice 在此展示，成功/失败由 updater 内部产出，不重复弹窗）
+      const isInstall = installState === "not_installed";
       const updateBtn = actions.createEl("button", {
-        text: "更新",
+        text: isInstall ? "安装" : "更新",
         cls: "xdf-update-btn",
       });
       updateBtn.addEventListener("click", () => {
-        const notice = new Notice(`[XDF Gateway] 正在更新 ${xdfPlugin.name}...`, 0);
+        const notice = new Notice(
+          `[XDF Gateway] 正在${isInstall ? "安装" : "更新"} ${xdfPlugin.name}...`,
+          0,
+        );
         void this.plugin.updater.updatePlugin(xdfPlugin.id, (stage) => {
           notice.setMessage(`[XDF Gateway] ${xdfPlugin.name}: ${stage}`);
+        }).then((ok) => {
+          window.setTimeout(() => notice.hide(), 1500);
+          if (ok) this.display();
         });
       });
     }
@@ -290,7 +337,10 @@ class GatewaySettingTab extends PluginSettingTab {
         btn
           .setButtonText("检查并更新")
           .setCta()
-          .onClick(() => { void this.plugin.runUpdateCheck(); }),
+          .onClick(async () => {
+            await this.plugin.runUpdateCheck();
+            this.display();
+          }),
       );
 
     // 插件分组
@@ -372,16 +422,17 @@ class GatewaySettingTab extends PluginSettingTab {
         toggleLabel.createSpan({ cls: "xdf-toggle-slider" });
 
         toggleInput.addEventListener("change", async () => {
+          const wantEnable = toggleInput.checked;
           try {
-            if (toggleInput.checked) {
-              await plugins.enablePlugin(pluginId);
+            if (wantEnable) {
+              await pluginManager.enablePluginAndSave(pluginId);
               new Notice(`[XDF Gateway] 已启用 ${m.name}`);
             } else {
-              await plugins.disablePlugin(pluginId);
+              await pluginManager.disablePluginAndSave(pluginId);
               new Notice(`[XDF Gateway] 已禁用 ${m.name}`);
             }
-            this.display();
           } catch (error) {
+            toggleInput.checked = !wantEnable;
             console.error(`[XDF Gateway] 切换插件状态失败: ${pluginId}`, error);
             new Notice(`[XDF Gateway] 操作失败，请查看控制台`);
           }

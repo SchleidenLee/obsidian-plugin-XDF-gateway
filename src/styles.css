@@ -333,3 +333,15 @@
 .xdf-pinned {
   font-weight: 600;
 }
+
+/* 未安装插件的禁用态 */
+.xdf-toggle-switch input:disabled {
+  cursor: not-allowed;
+}
+.xdf-toggle-switch input:disabled + .xdf-toggle-slider {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.xdf-plugin-row.is-not-installed .xdf-plugin-name {
+  opacity: 0.5;
+}

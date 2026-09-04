@@ -38,11 +38,15 @@ export interface PluginTagMap {
   [pluginId: string]: string[]; // pluginId -> tagId[]
 }
 
+/** 插件安装状态 */
+export type PluginInstallState = "not_installed" | "disabled" | "enabled";
+
 /** 插件更新信息 */
 export interface PluginUpdateInfo {
   id: string;
   name: string;
-  currentVersion: string;
+  /** 当前版本，null 表示未安装 */
+  currentVersion: string | null;
   latestVersion: string;
   repo: string;
 }

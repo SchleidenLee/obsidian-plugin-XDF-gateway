@@ -14,7 +14,7 @@ import {
   grabAllReleaseFiles,
   GHRateLimitError,
 } from "./github";
-import type { PluginUpdateInfo, ReleaseFiles } from "./types";
+import type { PluginInstallState, PluginUpdateInfo, ReleaseFiles } from "./types";
 
 export class PluginUpdater {
   private app: App;
@@ -61,7 +61,6 @@ export class PluginUpdater {
     plugin: { id: string; name: string; repo: string },
   ): Promise<PluginUpdateInfo | null> {
     const localVersion = await this.getLocalVersion(plugin.id);
-    if (!localVersion) return null;
 
     const release = await grabReleaseFromRepository(plugin.repo, this.settings);
     if (!release) {
@@ -70,6 +69,17 @@ export class PluginUpdater {
     }
 
     const latestVersion = release.tag_name;
+
+    // 未安装 → 视为需要安装（currentVersion 为 null）
+    if (!localVersion) {
+      return {
+        id: plugin.id,
+        name: plugin.name,
+        currentVersion: null,
+        latestVersion: latestVersion,
+        repo: plugin.repo,
+      };
+    }
 
     if (this.isNewerVersion(localVersion, latestVersion)) {
       return {
@@ -98,6 +108,9 @@ export class PluginUpdater {
       return false;
     }
 
+    // 记录安装前状态，用于区分安装/更新文案
+    const wasInstalled = !!(await this.getLocalVersion(pluginId));
+
     try {
       onProgress?.("获取 Release 信息...");
       const release = await grabReleaseFromRepository(
@@ -120,10 +133,10 @@ export class PluginUpdater {
       await this.writeReleaseFilesToPluginFolder(pluginId, files);
 
       onProgress?.("重载插件...");
-      await this.reloadPlugin(pluginId);
+      await this.reloadPlugin(pluginId, wasInstalled ? undefined : true);
 
       new Notice(
-        `[XDF-Gateway] ${pluginDef.name} 已更新至 ${release.tag_name}`,
+        `[XDF-Gateway] ${pluginDef.name} 已${wasInstalled ? "更新" : "安装"}至 ${release.tag_name}`,
         8000,
       );
       return true;
@@ -135,7 +148,9 @@ export class PluginUpdater {
         );
       } else {
         console.error(`[XDF-Gateway] 更新插件失败: ${pluginId}`, error);
-        new Notice(`[XDF-Gateway] 更新 ${pluginDef.name} 失败，请查看控制台。`);
+        new Notice(
+          `[XDF-Gateway] ${pluginDef.name} ${wasInstalled ? "更新失败" : "安装失败"}，请查看控制台。`,
+        );
       }
       return false;
     }
@@ -150,7 +165,7 @@ export class PluginUpdater {
     onProgress?: (current: number, total: number, name: string, stage: string) => void,
   ): Promise<number> {
     if (updates.length === 0) {
-      new Notice("[XDF-Gateway] 所有插件均为最新版本。");
+      new Notice("[XDF-Gateway] 所有插件均已安装且为最新版本。");
       return 0;
     }
 
@@ -165,7 +180,7 @@ export class PluginUpdater {
     }
 
     new Notice(
-      `[XDF-Gateway] 更新完成: ${successCount}/${updates.length} 个插件已成功更新。`,
+      `[XDF-Gateway] 安装/更新完成: ${successCount}/${updates.length} 个插件已成功处理。`,
     );
     return successCount;
   }
@@ -190,14 +205,26 @@ export class PluginUpdater {
     }
   }
 
-  async reloadPlugin(pluginId: string): Promise<void> {
+  async reloadPlugin(pluginId: string, forceEnable?: boolean): Promise<void> {
     const plugins = (this.app as any).plugins;
+    const wasEnabled = plugins?.enabledPlugins?.has(pluginId) ?? false;
     try {
       await plugins.disablePlugin(pluginId);
-      await plugins.enablePlugin(pluginId);
-    } catch (error) {
-      console.error(`[XDF-Gateway] 重载插件失败: ${pluginId}`, error);
-    }
+    } catch {}
+    await plugins.loadManifests();
+    const shouldEnable = forceEnable ?? wasEnabled;
+    if (!shouldEnable) return;
+    try {
+      await plugins.loadPlugin?.(pluginId);
+    } catch {}
+    await plugins.enablePluginAndSave(pluginId);
+  }
+
+  async getInstallState(pluginId: string): Promise<PluginInstallState> {
+    const localVersion = await this.getLocalVersion(pluginId);
+    if (!localVersion) return "not_installed";
+    const plugins = (this.app as any).plugins;
+    return plugins?.enabledPlugins?.has(pluginId) ? "enabled" : "disabled";
   }
 
   private async getLocalVersion(pluginId: string): Promise<string | null> {
