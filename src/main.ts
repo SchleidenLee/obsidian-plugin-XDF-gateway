@@ -227,32 +227,33 @@ class GatewaySettingTab extends PluginSettingTab {
 
       const row = xdfContainer.createDiv({ cls: `xdf-plugin-row${isPinned ? " is-pinned" : ""}` });
 
-      // 左侧：置顶图标 + 名称 + 描述
+      // 左侧：名称 + 描述
       const info = row.createDiv({ cls: "xdf-plugin-info" });
-      if (isPinned) {
-        const pinIcon = info.createSpan({ cls: "xdf-pin-badge", text: "📌 " });
-      }
       info.createSpan({ text: xdfPlugin.name, cls: "xdf-plugin-name" });
       if (description) {
         info.createSpan({ text: description, cls: "xdf-plugin-desc" });
       }
 
-      // 右侧：操作按钮
+      // 右侧：Toggle 开关 + 更新按钮
       const actions = row.createDiv({ cls: "xdf-plugin-actions" });
 
-      // 启用/禁用开关
-      const toggleBtn = actions.createEl("button", {
-        text: isEnabled ? "已启用" : "已禁用",
-        cls: `xdf-toggle-btn ${isEnabled ? "is-enabled" : "is-disabled"}`,
+      // Toggle 开关
+      const toggleLabel = actions.createEl("label", { cls: "xdf-toggle-switch" });
+      const toggleInput = toggleLabel.createEl("input", {
+        type: "checkbox",
+        cls: "xdf-toggle-input",
       });
-      toggleBtn.addEventListener("click", async () => {
+      toggleInput.checked = isEnabled;
+      toggleLabel.createSpan({ cls: "xdf-toggle-slider" });
+
+      toggleInput.addEventListener("change", async () => {
         try {
-          if (isEnabled) {
-            await plugins.disablePlugin(xdfPlugin.id);
-            new Notice(`[XDF Gateway] 已禁用 ${xdfPlugin.name}`);
-          } else {
+          if (toggleInput.checked) {
             await plugins.enablePlugin(xdfPlugin.id);
             new Notice(`[XDF Gateway] 已启用 ${xdfPlugin.name}`);
+          } else {
+            await plugins.disablePlugin(xdfPlugin.id);
+            new Notice(`[XDF Gateway] 已禁用 ${xdfPlugin.name}`);
           }
           this.display();
         } catch (error) {
@@ -264,7 +265,7 @@ class GatewaySettingTab extends PluginSettingTab {
       // 更新按钮
       const updateBtn = actions.createEl("button", {
         text: "更新",
-        cls: "mod-cta",
+        cls: "xdf-update-btn",
       });
       updateBtn.addEventListener("click", () => {
         void this.plugin.updater.updatePlugin(xdfPlugin.id);
@@ -285,6 +286,9 @@ class GatewaySettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: "插件分组" });
     const allPluginsContainer = containerEl.createDiv({ cls: "xdf-all-plugins" });
 
+    // 收集已分配到 XDF 套件的插件 ID（避免重复显示）
+    const xdfPluginIds = new Set(XDF_PLUGINS.map(p => p.id));
+
     for (const group of this.plugin.settings.groups) {
       const groupEl = allPluginsContainer.createDiv({ cls: "xdf-group-section" });
       const header = groupEl.createEl("details", { cls: "xdf-folder" });
@@ -304,6 +308,9 @@ class GatewaySettingTab extends PluginSettingTab {
       // 收集匹配项并按置顶排序
       const matchedPlugins: Array<{ pluginId: string; manifest: any; isPinned: boolean }> = [];
       for (const [pluginId, manifest] of Object.entries(manifests)) {
+        // 跳过已在 XDF 套件中显示的插件
+        if (xdfPluginIds.has(pluginId)) continue;
+
         const m = manifest as any;
         const name = m.name?.toLowerCase() || "";
         const isMatch = keywords.length === 0
@@ -328,31 +335,32 @@ class GatewaySettingTab extends PluginSettingTab {
 
         const row = list.createDiv({ cls: `xdf-plugin-row${isPinned ? " is-pinned" : ""}` });
 
-        // 左侧：置顶图标 + 名称 + 版本 + 描述
+        // 左侧：名称 + 版本 + 描述
         const info = row.createDiv({ cls: "xdf-plugin-info" });
-        if (isPinned) {
-          info.createSpan({ cls: "xdf-pin-badge", text: "📌 " });
-        }
         info.createSpan({ text: m.name, cls: "xdf-plugin-name" });
         info.createSpan({ text: `v${m.version}`, cls: "xdf-plugin-version" });
         if (description) {
           info.createSpan({ text: description, cls: "xdf-plugin-desc" });
         }
 
-        // 右侧：启用/禁用开关
+        // 右侧：Toggle 开关
         const actions = row.createDiv({ cls: "xdf-plugin-actions" });
-        const toggleBtn = actions.createEl("button", {
-          text: isEnabled ? "已启用" : "已禁用",
-          cls: `xdf-toggle-btn ${isEnabled ? "is-enabled" : "is-disabled"}`,
+        const toggleLabel = actions.createEl("label", { cls: "xdf-toggle-switch" });
+        const toggleInput = toggleLabel.createEl("input", {
+          type: "checkbox",
+          cls: "xdf-toggle-input",
         });
-        toggleBtn.addEventListener("click", async () => {
+        toggleInput.checked = isEnabled;
+        toggleLabel.createSpan({ cls: "xdf-toggle-slider" });
+
+        toggleInput.addEventListener("change", async () => {
           try {
-            if (isEnabled) {
-              await plugins.disablePlugin(pluginId);
-              new Notice(`[XDF Gateway] 已禁用 ${m.name}`);
-            } else {
+            if (toggleInput.checked) {
               await plugins.enablePlugin(pluginId);
               new Notice(`[XDF Gateway] 已启用 ${m.name}`);
+            } else {
+              await plugins.disablePlugin(pluginId);
+              new Notice(`[XDF Gateway] 已禁用 ${m.name}`);
             }
             this.display();
           } catch (error) {

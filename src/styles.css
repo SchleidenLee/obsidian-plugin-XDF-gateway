@@ -53,10 +53,21 @@
   background: var(--background-secondary);
   border-radius: 6px;
   border: 1px solid var(--background-modifier-border);
+  position: relative;
 }
 
-.xdf-plugin-row.is-pinned {
-  border-left: 3px solid var(--interactive-accent);
+/* 置顶样式 - 微妙的左侧指示条 */
+.xdf-plugin-row.is-pinned::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--text-muted);
+  border-radius: 0 2px 2px 0;
+  opacity: 0.5;
 }
 
 .xdf-plugin-info {
@@ -64,6 +75,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding-left: 4px;
 }
 
 .xdf-plugin-name {
@@ -88,40 +100,69 @@
   align-items: center;
 }
 
-.xdf-toggle-btn {
-  padding: 4px 12px;
-  border-radius: 12px;
+/* 小型 Toggle 开关 - iOS 风格 */
+.xdf-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+}
+
+.xdf-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.xdf-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--background-modifier-border);
+  transition: 0.3s;
+  border-radius: 22px;
+}
+
+.xdf-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.xdf-toggle-switch input:checked + .xdf-toggle-slider {
+  background-color: var(--interactive-accent);
+}
+
+.xdf-toggle-switch input:checked + .xdf-toggle-slider:before {
+  transform: translateX(18px);
+}
+
+/* 更新按钮 */
+.xdf-update-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
-  border: none;
+  border: 1px solid var(--interactive-accent);
+  background: transparent;
+  color: var(--interactive-accent);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.xdf-toggle-btn.is-enabled {
-  background: var(--background-modifier-success);
-  color: var(--text-success);
-}
-
-.xdf-toggle-btn.is-enabled:hover {
-  background: var(--background-modifier-error);
-  color: var(--text-error);
-}
-
-.xdf-toggle-btn.is-disabled {
-  background: var(--background-modifier-error);
-  color: var(--text-error);
-}
-
-.xdf-toggle-btn.is-disabled:hover {
-  background: var(--background-modifier-success);
-  color: var(--text-success);
-}
-
-/* 置顶图标 */
-.xdf-pin-badge {
-  font-size: 12px;
-  margin-right: 4px;
+.xdf-update-btn:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
 
 /* 分组区域 */
@@ -168,15 +209,6 @@
 .xdf-folder[data-group-id="xdf-suite"] > summary {
   color: var(--text-accent);
   font-weight: 700;
-}
-
-/* 分组配置 */
-.xdf-group-config {
-  margin-bottom: 12px;
-  padding: 12px;
-  background: var(--background-secondary);
-  border-radius: 6px;
-  border: 1px solid var(--background-modifier-border);
 }
 
 /* 标签管理 */
@@ -300,9 +332,4 @@
 
 .xdf-pinned {
   font-weight: 600;
-}
-
-.xdf-pin-icon {
-  margin-right: 4px;
-  font-size: 12px;
 }

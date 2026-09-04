@@ -73,7 +73,6 @@ export const DEFAULT_GROUPS: GroupConfig[] = [
 
 /** 预设标签 */
 export const DEFAULT_TAGS: TagConfig[] = [
-  { id: "tag-xdf", name: "XDF", color: "#7c3aed" },
   { id: "tag-calendar", name: "日历", color: "#059669" },
   { id: "tag-ai", name: "AI", color: "#dc2626" },
   { id: "tag-editor", name: "编辑器", color: "#2563eb" },
@@ -82,12 +81,12 @@ export const DEFAULT_TAGS: TagConfig[] = [
 
 /** 预设插件标签关联 */
 export const DEFAULT_PLUGIN_TAGS: { [pluginId: string]: string[] } = {
-  "xdf-gateway": ["tag-xdf", "tag-tool"],
-  "xdf-base": ["tag-xdf", "tag-tool"],
-  "xdf-classtracker": ["tag-xdf", "tag-calendar"],
-  "xdf-feedback-assistant": ["tag-xdf"],
-  "xdf-toolkits": ["tag-xdf", "tag-tool"],
-  "xdf-aichatbot": ["tag-xdf", "tag-ai"],
+  "xdf-gateway": ["tag-tool"],
+  "xdf-base": ["tag-tool"],
+  "xdf-classtracker": ["tag-calendar"],
+  "xdf-feedback-assistant": [],
+  "xdf-toolkits": ["tag-tool"],
+  "xdf-aichatbot": ["tag-ai"],
 };
 
 /** 默认镜像站列表 */
