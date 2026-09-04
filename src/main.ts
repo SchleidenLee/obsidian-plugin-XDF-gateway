@@ -299,6 +299,8 @@ class GatewaySettingTab extends PluginSettingTab {
 
     // 收集已分配到 XDF 套件的插件 ID（避免重复显示）
     const xdfPluginIds = new Set(XDF_PLUGINS.map(p => p.id));
+    // 记录已显示过的插件 ID（避免跨分组重复显示）
+    const displayedPluginIds = new Set<string>();
 
     for (const group of this.plugin.settings.groups) {
       // 跳过 XDF 教学套件分组（已在上方单独显示）
@@ -324,6 +326,8 @@ class GatewaySettingTab extends PluginSettingTab {
       for (const [pluginId, manifest] of Object.entries(manifests)) {
         // 跳过已在 XDF 套件中显示的插件
         if (xdfPluginIds.has(pluginId)) continue;
+        // 跳过已在其他分组中显示过的插件
+        if (displayedPluginIds.has(pluginId)) continue;
 
         const m = manifest as any;
         const name = m.name?.toLowerCase() || "";
@@ -383,6 +387,8 @@ class GatewaySettingTab extends PluginSettingTab {
           }
         });
       }
+      // 记录本分组已显示的插件 ID
+      matchedPlugins.forEach(p => displayedPluginIds.add(p.pluginId));
     }
   }
 
