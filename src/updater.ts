@@ -1,6 +1,6 @@
 /**
  * 插件更新引擎
- * 参考 BRAT 的 BetaPlugins 类实现
+ * 参考 BRAT 的 BetaPlugins 类 + BPM 的 installPluginFromGithub 实现
  */
 
 import type { App, PluginManifest } from "obsidian";
@@ -16,10 +16,6 @@ import {
 } from "./github";
 import type { PluginUpdateInfo, ReleaseFiles } from "./types";
 
-/**
- * 插件更新管理器
- * 负责检查更新、下载文件、写入磁盘、热重载
- */
 export class PluginUpdater {
   private app: App;
   private settings: GatewaySettings;
@@ -29,59 +25,44 @@ export class PluginUpdater {
     this.settings = settings;
   }
 
-  /**
-   * 更新设置引用（设置变更后调用）
-   */
   updateSettings(settings: GatewaySettings): void {
     this.settings = settings;
   }
 
   /**
    * 检查所有 XDF 插件的更新
-   * @returns 有可用更新的插件列表
+   * @param onProgress - 进度回调 (current, total, name)
    */
-  async checkForUpdates(): Promise<PluginUpdateInfo[]> {
+  async checkForUpdates(
+    onProgress?: (current: number, total: number, name: string) => void,
+  ): Promise<PluginUpdateInfo[]> {
     const updates: PluginUpdateInfo[] = [];
+    const total = XDF_PLUGINS.length;
 
-    for (const plugin of XDF_PLUGINS) {
+    for (let i = 0; i < total; i++) {
+      const plugin = XDF_PLUGINS[i];
+      onProgress?.(i + 1, total, plugin.name);
+
       try {
         const info = await this.checkSinglePluginUpdate(plugin);
-        if (info) {
-          updates.push(info);
-        }
+        if (info) updates.push(info);
       } catch (error) {
         if (error instanceof GHRateLimitError) {
-          new Notice(
-            `[XDF-Gateway] GitHub API 频率限制，${error.getMinutesToReset()} 分钟后重试。`,
-            15000,
-          );
-          // 触发 rate limit 后停止后续检查，避免继续浪费配额
-          break;
+          throw error;
         }
-        console.error(
-          `[XDF-Gateway] 检查插件更新失败: ${plugin.name}`,
-          error,
-        );
+        console.error(`[XDF-Gateway] 检查插件更新失败: ${plugin.name}`, error);
       }
     }
 
     return updates;
   }
 
-  /**
-   * 检查单个插件是否有更新
-   */
   private async checkSinglePluginUpdate(
     plugin: { id: string; name: string; repo: string },
   ): Promise<PluginUpdateInfo | null> {
-    // 读取本地 manifest.json 获取当前版本
     const localVersion = await this.getLocalVersion(plugin.id);
-    if (!localVersion) {
-      // 本地未安装，跳过
-      return null;
-    }
+    if (!localVersion) return null;
 
-    // 获取 GitHub 最新版本
     const release = await grabReleaseFromRepository(plugin.repo, this.settings);
     if (!release) {
       console.warn(`[XDF-Gateway] 未找到 Release: ${plugin.repo}`);
@@ -90,7 +71,6 @@ export class PluginUpdater {
 
     const latestVersion = release.tag_name;
 
-    // 版本比较
     if (this.isNewerVersion(localVersion, latestVersion)) {
       return {
         id: plugin.id,
@@ -105,12 +85,13 @@ export class PluginUpdater {
   }
 
   /**
-   * 更新指定插件到最新版本
-   *
-   * @param pluginId - 插件 ID（对应 XDF_PLUGINS 中的 id）
-   * @returns 是否更新成功
+   * 更新单个插件
+   * @param onProgress - 进度回调 (stage: string)
    */
-  async updatePlugin(pluginId: string): Promise<boolean> {
+  async updatePlugin(
+    pluginId: string,
+    onProgress?: (stage: string) => void,
+  ): Promise<boolean> {
     const pluginDef = XDF_PLUGINS.find((p) => p.id === pluginId);
     if (!pluginDef) {
       new Notice(`[XDF-Gateway] 未找到插件定义: ${pluginId}`);
@@ -118,7 +99,7 @@ export class PluginUpdater {
     }
 
     try {
-      // 获取最新 Release
+      onProgress?.("获取 Release 信息...");
       const release = await grabReleaseFromRepository(
         pluginDef.repo,
         this.settings,
@@ -128,17 +109,17 @@ export class PluginUpdater {
         return false;
       }
 
-      // 下载全部文件
+      onProgress?.("下载文件...");
       const files = await grabAllReleaseFiles(release, this.settings);
       if (!files.mainJs) {
         new Notice(`[XDF-Gateway] Release 文件不完整，缺少 main.js`);
         return false;
       }
 
-      // 写入文件
+      onProgress?.("写入文件...");
       await this.writeReleaseFilesToPluginFolder(pluginId, files);
 
-      // 热重载
+      onProgress?.("重载插件...");
       await this.reloadPlugin(pluginId);
 
       new Notice(
@@ -161,20 +142,25 @@ export class PluginUpdater {
   }
 
   /**
-   * 批量更新所有有更新的插件
-   * @returns 成功更新的插件数量
+   * 批量更新
+   * @param onProgress - 进度回调 (current, total, name, stage)
    */
-  async updateAll(updates: PluginUpdateInfo[]): Promise<number> {
+  async updateAll(
+    updates: PluginUpdateInfo[],
+    onProgress?: (current: number, total: number, name: string, stage: string) => void,
+  ): Promise<number> {
     if (updates.length === 0) {
       new Notice("[XDF-Gateway] 所有插件均为最新版本。");
       return 0;
     }
 
-    new Notice(`[XDF-Gateway] 正在更新 ${updates.length} 个插件...`);
-
     let successCount = 0;
-    for (const update of updates) {
-      const success = await this.updatePlugin(update.id);
+    for (let i = 0; i < updates.length; i++) {
+      const update = updates[i];
+      onProgress?.(i + 1, updates.length, update.name, "开始更新");
+      const success = await this.updatePlugin(update.id, (stage) => {
+        onProgress?.(i + 1, updates.length, update.name, stage);
+      });
       if (success) successCount++;
     }
 
@@ -184,10 +170,6 @@ export class PluginUpdater {
     return successCount;
   }
 
-  /**
-   * 将 Release 文件写入插件目录
-   * 使用 Obsidian 的 vault.adapter API
-   */
   async writeReleaseFilesToPluginFolder(
     pluginId: string,
     files: ReleaseFiles,
@@ -197,12 +179,10 @@ export class PluginUpdater {
     );
     const { adapter } = this.app.vault;
 
-    // 确保目录存在
     if (!(await adapter.exists(pluginFolder))) {
       await adapter.mkdir(pluginFolder);
     }
 
-    // 写入文件
     await adapter.write(`${pluginFolder}/main.js`, files.mainJs ?? "");
     await adapter.write(`${pluginFolder}/manifest.json`, files.manifest ?? "");
     if (files.styles) {
@@ -210,12 +190,7 @@ export class PluginUpdater {
     }
   }
 
-  /**
-   * 热重载插件（先禁用再启用）
-   */
   async reloadPlugin(pluginId: string): Promise<void> {
-    // plugins 是 Obsidian 内部 API，不在公共类型中
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const plugins = (this.app as any).plugins;
     try {
       await plugins.disablePlugin(pluginId);
@@ -225,9 +200,6 @@ export class PluginUpdater {
     }
   }
 
-  /**
-   * 读取本地插件 manifest.json 中的版本号
-   */
   private async getLocalVersion(pluginId: string): Promise<string | null> {
     const manifestPath = normalizePath(
       `${this.app.vault.configDir}/plugins/${pluginId}/manifest.json`,
@@ -235,9 +207,7 @@ export class PluginUpdater {
 
     try {
       const { adapter } = this.app.vault;
-      if (!(await adapter.exists(manifestPath))) {
-        return null;
-      }
+      if (!(await adapter.exists(manifestPath))) return null;
       const content = await adapter.read(manifestPath);
       const manifest: PluginManifest = JSON.parse(content);
       return manifest.version ?? null;
@@ -246,10 +216,6 @@ export class PluginUpdater {
     }
   }
 
-  /**
-   * 比较两个版本字符串，判断 remote 是否比 local 更新
-   * 优先使用 semver 比较，fallback 到字符串比较
-   */
   private isNewerVersion(local: string, remote: string): boolean {
     const localVer = semverCoerce(local);
     const remoteVer = semverCoerce(remote);
@@ -258,7 +224,6 @@ export class PluginUpdater {
       return compareVersions(remoteVer, localVer) > 0;
     }
 
-    // fallback: 字符串比较
     return local !== remote;
   }
 }

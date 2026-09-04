@@ -68,26 +68,34 @@ export default class XdfGatewayPlugin extends Plugin {
   }
 
   async runUpdateCheck(): Promise<void> {
-    new Notice("[XDF Gateway] 正在检查插件更新...");
+    const notice = new Notice("[XDF Gateway] 正在检查插件更新...", 0);
     try {
-      const updates = await this.updater.checkForUpdates();
+      const updates = await this.updater.checkForUpdates((current, total, name) => {
+        notice.setMessage(`[XDF Gateway] 正在检查: ${name} (${current}/${total})`);
+      });
+
       if (updates.length === 0) {
-        new Notice("[XDF Gateway] 所有 XDF 插件均为最新版本。");
+        notice.setMessage("[XDF Gateway] 所有 XDF 插件均为最新版本。");
+        window.setTimeout(() => notice.hide(), 3000);
       } else {
         const names = updates.map(
           (u) => `${u.name} (${u.currentVersion} → ${u.latestVersion})`,
         );
-        new Notice(
-          `[XDF Gateway] 发现 ${updates.length} 个更新:\n${names.join("\n")}`,
-          15000,
+        notice.setMessage(
+          `[XDF Gateway] 发现 ${updates.length} 个更新:\n${names.join("\n")}\n\n正在更新...`,
         );
-        await this.updater.updateAll(updates);
+        await this.updater.updateAll(updates, (current, total, name, stage) => {
+          notice.setMessage(`[XDF Gateway] ${name}: ${stage} (${current}/${total})`);
+        });
+        notice.setMessage("[XDF Gateway] 更新完成！");
+        window.setTimeout(() => notice.hide(), 3000);
       }
       this.settings.lastUpdateCheck = Date.now();
       await this.saveSettings();
     } catch (error) {
       console.error("[XDF Gateway] 检查更新失败", error);
-      new Notice("[XDF Gateway] 检查更新失败，请查看控制台。");
+      notice.setMessage("[XDF Gateway] 检查更新失败，请查看控制台。");
+      window.setTimeout(() => notice.hide(), 5000);
     }
   }
 
@@ -268,7 +276,10 @@ class GatewaySettingTab extends PluginSettingTab {
         cls: "xdf-update-btn",
       });
       updateBtn.addEventListener("click", () => {
-        void this.plugin.updater.updatePlugin(xdfPlugin.id);
+        const notice = new Notice(`[XDF Gateway] 正在更新 ${xdfPlugin.name}...`, 0);
+        void this.plugin.updater.updatePlugin(xdfPlugin.id, (stage) => {
+          notice.setMessage(`[XDF Gateway] ${xdfPlugin.name}: ${stage}`);
+        });
       });
     }
 
