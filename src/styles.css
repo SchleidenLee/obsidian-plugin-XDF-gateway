@@ -1,0 +1,79 @@
+/* XDF Gateway 设置页分组样式 */
+
+/* 分组容器 */
+.xdf-folder {
+  margin: 4px 0;
+  border-radius: 6px;
+  background: var(--background-secondary);
+}
+
+.xdf-folder > summary {
+  cursor: pointer;
+  padding: 6px 12px;
+  font-weight: 600;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  user-select: none;
+  list-style: none;
+}
+
+.xdf-folder > summary::-webkit-details-marker {
+  display: none;
+}
+
+.xdf-folder > summary::before {
+  content: "▶";
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.xdf-folder[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+/* XDF 教学套件分组特殊高亮 */
+.xdf-folder[data-group-id="xdf-suite"] > summary {
+  color: var(--text-accent);
+  font-weight: 700;
+}
+
+/* Proxy 按钮 */
+.xdf-proxy {
+  padding-left: 28px !important;
+}
+
+/* 隐藏原始插件项 */
+.xdf-hidden {
+  display: none !important;
+}
+
+/* 拖拽手柄 */
+.xdf-drag-handle {
+  cursor: grab;
+  opacity: 0.4;
+  margin-right: 4px;
+}
+
+.xdf-drag-handle:hover {
+  opacity: 1;
+}
+
+/* 拖拽中的样式 */
+.xdf-dragging {
+  opacity: 0.5;
+}
+
+.xdf-drop-target-above {
+  box-shadow: 0 -2px 0 var(--interactive-accent);
+}
+
+.xdf-drop-target-below {
+  box-shadow: 0 2px 0 var(--interactive-accent);
+}
+
+/* 紧凑模式 */
+.xdf-compact .vertical-tab-header-group-title {
+  display: none;
+}

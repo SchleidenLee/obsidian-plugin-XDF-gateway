@@ -1,0 +1,21 @@
+{
+  "name": "xdf-gateway",
+  "version": "0.1.0",
+  "description": "XDF 插件管理中枢：自动更新 + 设置页分组 + 插件管理",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": [],
+  "author": "Schleiden",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "0.21.5",
+    "obsidian": "^1.7.2",
+    "tslib": "^2.6.2",
+    "typescript": "^5.4.5"
+  }
+}
