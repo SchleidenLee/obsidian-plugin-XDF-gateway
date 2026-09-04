@@ -14,6 +14,7 @@ import {
   grabAllReleaseFiles,
   GHRateLimitError,
 } from "./github";
+import { getPluginManager } from "./obsidian-internals";
 import type { PluginInstallState, PluginUpdateInfo, ReleaseFiles } from "./types";
 
 export class PluginUpdater {
@@ -206,8 +207,8 @@ export class PluginUpdater {
   }
 
   async reloadPlugin(pluginId: string, forceEnable?: boolean): Promise<void> {
-    const plugins = (this.app as any).plugins;
-    const wasEnabled = plugins?.enabledPlugins?.has(pluginId) ?? false;
+    const plugins = getPluginManager(this.app);
+    const wasEnabled = plugins.enabledPlugins.has(pluginId);
     try {
       await plugins.disablePlugin(pluginId);
     } catch {}
@@ -223,8 +224,7 @@ export class PluginUpdater {
   async getInstallState(pluginId: string): Promise<PluginInstallState> {
     const localVersion = await this.getLocalVersion(pluginId);
     if (!localVersion) return "not_installed";
-    const plugins = (this.app as any).plugins;
-    return plugins?.enabledPlugins?.has(pluginId) ? "enabled" : "disabled";
+    return getPluginManager(this.app).enabledPlugins.has(pluginId) ? "enabled" : "disabled";
   }
 
   private async getLocalVersion(pluginId: string): Promise<string | null> {

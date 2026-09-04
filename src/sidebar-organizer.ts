@@ -1,4 +1,5 @@
 import type { App, PluginManifest } from "obsidian";
+import { getSetting, getSettingDoc, getManifests } from "./obsidian-internals";
 import type { GroupConfig, GroupItem } from "./types";
 
 export class SidebarOrganizer {
@@ -17,7 +18,7 @@ export class SidebarOrganizer {
   }
 
   enable(): void {
-    const setting = (this.app as any).setting;
+    const setting = getSetting(this.app);
     if (!setting) return;
 
     this.originalOnOpen = setting.onOpen;
@@ -52,7 +53,7 @@ export class SidebarOrganizer {
   }
 
   disable(): void {
-    const setting = (this.app as any).setting;
+    const setting = getSetting(this.app);
     if (!setting) return;
 
     if (this.originalOnOpen) {
@@ -90,7 +91,7 @@ export class SidebarOrganizer {
     targetContainer.querySelectorAll('.xdf-hidden').forEach(el => el.classList.remove('xdf-hidden'));
 
     const pluginItems = Array.from(targetContainer.querySelectorAll('.vertical-tab-nav-item'));
-    const manifests = (this.app as any).plugins?.manifests || {};
+    const manifests = getManifests(this.app);
 
     // 创建分组容器
     const groupsMap = this.groups.map((group) => {
@@ -267,12 +268,7 @@ export class SidebarOrganizer {
   }
 
   private getSettingDoc(): Document {
-    const setting = (this.app as any).setting;
-    if (setting) {
-      const el = setting.tabHeadersEl || setting.modalEl || setting.containerEl;
-      if (el?.ownerDocument) return el.ownerDocument;
-    }
-    return document;
+    return getSettingDoc(this.app);
   }
 
   updateGroups(groups: GroupConfig[]): void {
