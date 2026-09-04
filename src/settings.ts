@@ -9,6 +9,8 @@ export interface GatewaySettings {
   autoUpdate: boolean;
   /** 自动更新间隔（分钟） */
   updateInterval: number;
+  /** GitHub Token（提高 API 频率限制） */
+  githubToken: string;
   /** 镜像站列表 */
   mirrors: string[];
   /** 代理 URL 模板 */
@@ -92,14 +94,19 @@ export const DEFAULT_PLUGIN_TAGS: { [pluginId: string]: string[] } = {
 /** 默认镜像站列表 */
 export const DEFAULT_MIRRORS = [
   "https://gh-proxy.com/",
-  "https://ghproxy.net/",
+  "https://mirror.ghproxy.com/",
+  "https://github.akams.cn/",
+  "https://moeyy.cn/gh-proxy/",
   "https://gh.llkk.cc/",
   "https://ghfast.top/",
+  "https://github.moeyy.xyz/",
+  "https://gitproxy.click/",
 ];
 
 export const DEFAULT_SETTINGS: GatewaySettings = {
   autoUpdate: true,
   updateInterval: 60,
+  githubToken: "",
   mirrors: DEFAULT_MIRRORS,
   proxyTemplate: "{prefix}{url}",
   groups: DEFAULT_GROUPS,

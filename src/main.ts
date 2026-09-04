@@ -529,6 +529,20 @@ class GatewaySettingTab extends PluginSettingTab {
           }),
       );
 
+    // GitHub Token
+    new Setting(containerEl)
+      .setName("GitHub Token")
+      .setDesc("可选，提高 API 频率限制（60 次/小时 → 5000 次/小时）。从 https://github.com/settings/tokens 获取")
+      .addText((text) =>
+        text
+          .setPlaceholder("ghp_xxxxxxxxxxxx")
+          .setValue(this.plugin.settings.githubToken)
+          .onChange(async (value) => {
+            this.plugin.settings.githubToken = value.trim();
+            await this.plugin.saveSettings();
+          }),
+      );
+
     // 紧凑模式
     new Setting(containerEl)
       .setName("紧凑模式")

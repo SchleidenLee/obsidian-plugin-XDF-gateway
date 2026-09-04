@@ -134,11 +134,14 @@ export async function gitHubRequest(
   options: RequestUrlParam,
   settings: GatewaySettings,
 ): Promise<RequestUrlResponse> {
-  // 注入 User-Agent header
+  // 注入 User-Agent header 和可选的 Token
   options.headers = {
     ...options.headers,
     "User-Agent": "Obsidian/XDF-Gateway",
   };
+  if (settings.githubToken) {
+    options.headers["Authorization"] = `token ${settings.githubToken}`;
+  }
 
   // 如果不需要代理，直接请求
   if (!needsProxy(options.url)) {
@@ -147,16 +150,17 @@ export async function gitHubRequest(
 
   // 收集所有错误，全部失败时抛出最后一个
   let lastError: Error | null = null;
+  let rateLimitHit = false;
 
   // 先尝试原始 URL（有时直连也能通）
   try {
     return await doRequest(options);
   } catch (error) {
     lastError = error instanceof Error ? error : new Error(String(error));
-    // 如果是 rate limit 错误，不需要重试镜像站，直接抛出
     if (error instanceof GHRateLimitError) {
-      throw error;
+      rateLimitHit = true;
     }
+    // rate limit 也继续试镜像站，不同镜像站有独立配额
   }
 
   // 依次尝试每个镜像站
@@ -171,16 +175,15 @@ export async function gitHubRequest(
       return await doRequest(proxyOptions);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      // rate limit 错误不重试
-      if (error instanceof GHRateLimitError) {
-        throw error;
-      }
-      // 继续尝试下一个镜像
+      // rate limit 也继续试下一个镜像站
       continue;
     }
   }
 
-  // 全部失败
+  // 全部失败，如果是 rate limit 给出更明确的提示
+  if (rateLimitHit) {
+    throw new Error("GitHub API 频率限制已用尽，所有镜像站均无法访问。请稍后重试或配置 GitHub Token。");
+  }
   throw lastError ?? new Error("所有镜像站均请求失败");
 }
 
