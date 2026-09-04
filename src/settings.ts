@@ -2,7 +2,7 @@
  * XDF Gateway 设置管理
  */
 
-import type { GroupConfig, XdfPlugin } from "./types";
+import type { GroupConfig, TagConfig, XdfPlugin } from "./types";
 
 export interface GatewaySettings {
   /** 是否启用自动更新 */
@@ -15,6 +15,12 @@ export interface GatewaySettings {
   proxyTemplate: string;
   /** 分组配置 */
   groups: GroupConfig[];
+  /** 标签配置 */
+  tags: TagConfig[];
+  /** 插件标签关联 */
+  pluginTags: { [pluginId: string]: string[] };
+  /** 置顶插件 ID 列表 */
+  pinnedPlugins: string[];
   /** 紧凑模式（折叠 Core/Community 标题） */
   compactMode: boolean;
   /** 是否显示未分组插件 */
@@ -52,7 +58,7 @@ export const DEFAULT_GROUPS: GroupConfig[] = [
   {
     id: "calendar",
     name: "日历与排班",
-    keywords: "calendar,calendar,schedule,tracker",
+    keywords: "calendar,schedule,tracker",
     collapsed: false,
     items: [],
   },
@@ -64,6 +70,25 @@ export const DEFAULT_GROUPS: GroupConfig[] = [
     items: [],
   },
 ];
+
+/** 预设标签 */
+export const DEFAULT_TAGS: TagConfig[] = [
+  { id: "tag-xdf", name: "XDF", color: "#7c3aed" },
+  { id: "tag-calendar", name: "日历", color: "#059669" },
+  { id: "tag-ai", name: "AI", color: "#dc2626" },
+  { id: "tag-editor", name: "编辑器", color: "#2563eb" },
+  { id: "tag-tool", name: "工具", color: "#6b7280" },
+];
+
+/** 预设插件标签关联 */
+export const DEFAULT_PLUGIN_TAGS: { [pluginId: string]: string[] } = {
+  "xdf-gateway": ["tag-xdf", "tag-tool"],
+  "xdf-base": ["tag-xdf", "tag-tool"],
+  "xdf-classtracker": ["tag-xdf", "tag-calendar"],
+  "xdf-feedback-assistant": ["tag-xdf"],
+  "xdf-toolkits": ["tag-xdf", "tag-tool"],
+  "xdf-aichatbot": ["tag-xdf", "tag-ai"],
+};
 
 /** 默认镜像站列表 */
 export const DEFAULT_MIRRORS = [
@@ -79,6 +104,9 @@ export const DEFAULT_SETTINGS: GatewaySettings = {
   mirrors: DEFAULT_MIRRORS,
   proxyTemplate: "{prefix}{url}",
   groups: DEFAULT_GROUPS,
+  tags: DEFAULT_TAGS,
+  pluginTags: DEFAULT_PLUGIN_TAGS,
+  pinnedPlugins: ["xdf-gateway"],
   compactMode: true,
   showUngrouped: true,
   lastUpdateCheck: 0,

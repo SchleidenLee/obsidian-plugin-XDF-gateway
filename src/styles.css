@@ -77,12 +77,6 @@
   line-height: 1.4;
 }
 
-.xdf-plugin-id {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-family: var(--font-monospace);
-}
-
 .xdf-plugin-version {
   color: var(--text-muted);
   font-size: 12px;
@@ -122,6 +116,12 @@
 .xdf-toggle-btn.is-disabled:hover {
   background: var(--background-modifier-success);
   color: var(--text-success);
+}
+
+/* 置顶图标 */
+.xdf-pin-badge {
+  font-size: 12px;
+  margin-right: 4px;
 }
 
 /* 分组区域 */
@@ -179,6 +179,110 @@
   border: 1px solid var(--background-modifier-border);
 }
 
+/* 标签管理 */
+.xdf-tags-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.xdf-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--background-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.xdf-tag-preview {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid;
+  min-width: 40px;
+  text-align: center;
+}
+
+.xdf-tag-name-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+
+.xdf-tag-color-input {
+  width: 32px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.xdf-tag-delete-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-error);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-error);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.xdf-tag-delete-btn:hover {
+  background: var(--background-modifier-error);
+  color: var(--text-on-accent);
+}
+
+/* 插件标签行 */
+.xdf-plugin-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  background: var(--background-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.xdf-plugin-tag-name {
+  flex: 1;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.xdf-plugin-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.xdf-tag-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid;
+}
+
+.xdf-add-tag-select {
+  padding: 2px 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* 紧凑模式 */
 .xdf-compact .vertical-tab-header-group-title {
   display: none;
@@ -192,4 +296,13 @@
 /* Proxy 按钮 */
 .xdf-proxy {
   padding-left: 28px !important;
+}
+
+.xdf-pinned {
+  font-weight: 600;
+}
+
+.xdf-pin-icon {
+  margin-right: 4px;
+  font-size: 12px;
 }

@@ -7,11 +7,11 @@
  * 3. 通用插件管理
  */
 
-import { Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { Notice, Plugin, PluginSettingTab, Setting, setIcon } from "obsidian";
 import { DEFAULT_SETTINGS, type GatewaySettings, XDF_PLUGINS } from "./settings";
 import { PluginUpdater } from "./updater";
 import { SidebarOrganizer } from "./sidebar-organizer";
-import type { GroupConfig } from "./types";
+import type { GroupConfig, TagConfig } from "./types";
 
 export default class XdfGatewayPlugin extends Plugin {
   settings!: GatewaySettings;
@@ -23,7 +23,7 @@ export default class XdfGatewayPlugin extends Plugin {
     await this.loadSettings();
 
     this.updater = new PluginUpdater(this.app, this.settings);
-    this.organizer = new SidebarOrganizer(this.app, this.settings.groups);
+    this.organizer = new SidebarOrganizer(this.app, this.settings.groups, this.settings.pinnedPlugins);
 
     this.loadStyles();
 
@@ -143,6 +143,7 @@ export default class XdfGatewayPlugin extends Plugin {
     }
     if (this.organizer) {
       this.organizer.updateGroups(this.settings.groups);
+      this.organizer.updatePinnedPlugins(this.settings.pinnedPlugins);
     }
     if (this.settings.autoUpdate) {
       this.startUpdateTimer();
@@ -156,7 +157,7 @@ export default class XdfGatewayPlugin extends Plugin {
 /** 设置面板 — 带 banner 导航 */
 class GatewaySettingTab extends PluginSettingTab {
   plugin: XdfGatewayPlugin;
-  private activeTab: "plugins" | "groups" | "settings" = "plugins";
+  private activeTab: "plugins" | "tags" | "settings" = "plugins";
 
   constructor(app: any, plugin: XdfGatewayPlugin) {
     super(app, plugin);
@@ -170,9 +171,9 @@ class GatewaySettingTab extends PluginSettingTab {
     // Banner 导航
     const bannerEl = containerEl.createDiv({ cls: "xdf-banner-nav" });
     const tabs = [
-      { id: "plugins" as const, label: "插件管理", icon: "puzzle" },
-      { id: "groups" as const, label: "分组设置", icon: "folder" },
-      { id: "settings" as const, label: "高级设置", icon: "settings" },
+      { id: "plugins" as const, label: "插件管理" },
+      { id: "tags" as const, label: "标签管理" },
+      { id: "settings" as const, label: "高级设置" },
     ];
 
     for (const tab of tabs) {
@@ -193,8 +194,8 @@ class GatewaySettingTab extends PluginSettingTab {
       case "plugins":
         this.renderPluginsTab(contentEl);
         break;
-      case "groups":
-        this.renderGroupsTab(contentEl);
+      case "tags":
+        this.renderTagsTab(contentEl);
         break;
       case "settings":
         this.renderSettingsTab(contentEl);
@@ -222,11 +223,15 @@ class GatewaySettingTab extends PluginSettingTab {
       const m = manifests[xdfPlugin.id] as any;
       const isEnabled = enabledPlugins.has(xdfPlugin.id);
       const description = m?.description || "";
+      const isPinned = this.plugin.settings.pinnedPlugins.includes(xdfPlugin.id);
 
-      const row = xdfContainer.createDiv({ cls: `xdf-plugin-row ${xdfPlugin.pinned ? "is-pinned" : ""}` });
+      const row = xdfContainer.createDiv({ cls: `xdf-plugin-row${isPinned ? " is-pinned" : ""}` });
 
-      // 左侧：名称 + 描述
+      // 左侧：置顶图标 + 名称 + 描述
       const info = row.createDiv({ cls: "xdf-plugin-info" });
+      if (isPinned) {
+        const pinIcon = info.createSpan({ cls: "xdf-pin-badge", text: "📌 " });
+      }
       info.createSpan({ text: xdfPlugin.name, cls: "xdf-plugin-name" });
       if (description) {
         info.createSpan({ text: description, cls: "xdf-plugin-desc" });
@@ -296,6 +301,8 @@ class GatewaySettingTab extends PluginSettingTab {
         .map((k) => k.trim().toLowerCase())
         .filter(Boolean);
 
+      // 收集匹配项并按置顶排序
+      const matchedPlugins: Array<{ pluginId: string; manifest: any; isPinned: boolean }> = [];
       for (const [pluginId, manifest] of Object.entries(manifests)) {
         const m = manifest as any;
         const name = m.name?.toLowerCase() || "";
@@ -304,97 +311,180 @@ class GatewaySettingTab extends PluginSettingTab {
           : keywords.some((kw) => name.includes(kw));
 
         if (isMatch) {
-          const isEnabled = enabledPlugins.has(pluginId);
-          const description = m?.description || "";
-
-          const row = list.createDiv({ cls: "xdf-plugin-row" });
-
-          // 左侧：名称 + 描述
-          const info = row.createDiv({ cls: "xdf-plugin-info" });
-          info.createSpan({ text: m.name, cls: "xdf-plugin-name" });
-          info.createSpan({ text: `v${m.version}`, cls: "xdf-plugin-version" });
-          if (description) {
-            info.createSpan({ text: description, cls: "xdf-plugin-desc" });
-          }
-
-          // 右侧：启用/禁用开关
-          const actions = row.createDiv({ cls: "xdf-plugin-actions" });
-          const toggleBtn = actions.createEl("button", {
-            text: isEnabled ? "已启用" : "已禁用",
-            cls: `xdf-toggle-btn ${isEnabled ? "is-enabled" : "is-disabled"}`,
-          });
-          toggleBtn.addEventListener("click", async () => {
-            try {
-              if (isEnabled) {
-                await plugins.disablePlugin(pluginId);
-                new Notice(`[XDF Gateway] 已禁用 ${m.name}`);
-              } else {
-                await plugins.enablePlugin(pluginId);
-                new Notice(`[XDF Gateway] 已启用 ${m.name}`);
-              }
-              this.display();
-            } catch (error) {
-              console.error(`[XDF Gateway] 切换插件状态失败: ${pluginId}`, error);
-              new Notice(`[XDF Gateway] 操作失败，请查看控制台`);
-            }
-          });
+          const isPinned = this.plugin.settings.pinnedPlugins.includes(pluginId);
+          matchedPlugins.push({ pluginId, manifest: m, isPinned });
         }
+      }
+      // 置顶排前面
+      matchedPlugins.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return 0;
+      });
+
+      for (const { pluginId, manifest: m, isPinned } of matchedPlugins) {
+        const isEnabled = enabledPlugins.has(pluginId);
+        const description = m?.description || "";
+
+        const row = list.createDiv({ cls: `xdf-plugin-row${isPinned ? " is-pinned" : ""}` });
+
+        // 左侧：置顶图标 + 名称 + 版本 + 描述
+        const info = row.createDiv({ cls: "xdf-plugin-info" });
+        if (isPinned) {
+          info.createSpan({ cls: "xdf-pin-badge", text: "📌 " });
+        }
+        info.createSpan({ text: m.name, cls: "xdf-plugin-name" });
+        info.createSpan({ text: `v${m.version}`, cls: "xdf-plugin-version" });
+        if (description) {
+          info.createSpan({ text: description, cls: "xdf-plugin-desc" });
+        }
+
+        // 右侧：启用/禁用开关
+        const actions = row.createDiv({ cls: "xdf-plugin-actions" });
+        const toggleBtn = actions.createEl("button", {
+          text: isEnabled ? "已启用" : "已禁用",
+          cls: `xdf-toggle-btn ${isEnabled ? "is-enabled" : "is-disabled"}`,
+        });
+        toggleBtn.addEventListener("click", async () => {
+          try {
+            if (isEnabled) {
+              await plugins.disablePlugin(pluginId);
+              new Notice(`[XDF Gateway] 已禁用 ${m.name}`);
+            } else {
+              await plugins.enablePlugin(pluginId);
+              new Notice(`[XDF Gateway] 已启用 ${m.name}`);
+            }
+            this.display();
+          } catch (error) {
+            console.error(`[XDF Gateway] 切换插件状态失败: ${pluginId}`, error);
+            new Notice(`[XDF Gateway] 操作失败，请查看控制台`);
+          }
+        });
       }
     }
   }
 
-  /** 分组设置 Tab */
-  private renderGroupsTab(containerEl: HTMLElement): void {
-    containerEl.createEl("h3", { text: "分组管理" });
+  /** 标签管理 Tab */
+  private renderTagsTab(containerEl: HTMLElement): void {
+    containerEl.createEl("h3", { text: "标签管理" });
+    containerEl.createEl("p", {
+      text: "为插件添加标签，方便分类和筛选。",
+      cls: "mod-muted",
+    });
 
-    for (let i = 0; i < this.plugin.settings.groups.length; i++) {
-      const group = this.plugin.settings.groups[i];
-      const groupEl = containerEl.createDiv({ cls: "xdf-group-config" });
+    // 标签列表
+    const tagsContainer = containerEl.createDiv({ cls: "xdf-tags-list" });
+    for (const tag of this.plugin.settings.tags) {
+      const tagRow = tagsContainer.createDiv({ cls: "xdf-tag-row" });
 
-      new Setting(groupEl)
-        .setName(group.name)
-        .setDesc(`关键词：${group.keywords || "（无，匹配所有未分组插件）"}`)
-        .addText((text) =>
-          text
-            .setPlaceholder("关键词，逗号分隔")
-            .setValue(group.keywords)
-            .onChange(async (value) => {
-              this.plugin.settings.groups[i].keywords = value;
-              await this.plugin.saveSettings();
-              this.display();
-            }),
-        )
-        .addButton((btn) =>
-          btn
-            .setIcon("trash")
-            .setTooltip("删除分组")
-            .onClick(async () => {
-              this.plugin.settings.groups.splice(i, 1);
-              await this.plugin.saveSettings();
-              this.display();
-            }),
-        );
+      // 标签预览
+      const preview = tagRow.createSpan({ cls: "xdf-tag-preview" });
+      preview.textContent = tag.name;
+      preview.style.backgroundColor = tag.color + "22";
+      preview.style.color = tag.color;
+      preview.style.borderColor = tag.color;
+
+      // 编辑名称
+      const nameInput = tagRow.createEl("input", {
+        cls: "xdf-tag-name-input",
+        type: "text",
+        value: tag.name,
+      });
+      nameInput.addEventListener("change", async () => {
+        tag.name = nameInput.value.trim() || tag.name;
+        await this.plugin.saveSettings();
+      });
+
+      // 颜色选择
+      const colorInput = tagRow.createEl("input", {
+        cls: "xdf-tag-color-input",
+        type: "color",
+        value: tag.color,
+      });
+      colorInput.addEventListener("change", async () => {
+        tag.color = colorInput.value;
+        preview.style.backgroundColor = tag.color + "22";
+        preview.style.color = tag.color;
+        preview.style.borderColor = tag.color;
+        await this.plugin.saveSettings();
+      });
+
+      // 删除按钮
+      const deleteBtn = tagRow.createEl("button", {
+        cls: "xdf-tag-delete-btn",
+        text: "删除",
+      });
+      deleteBtn.addEventListener("click", async () => {
+        this.plugin.settings.tags = this.plugin.settings.tags.filter(t => t.id !== tag.id);
+        // 清理插件标签关联
+        for (const pluginId of Object.keys(this.plugin.settings.pluginTags)) {
+          this.plugin.settings.pluginTags[pluginId] = this.plugin.settings.pluginTags[pluginId].filter(tid => tid !== tag.id);
+        }
+        await this.plugin.saveSettings();
+        this.display();
+      });
     }
 
-    // 添加分组按钮
+    // 添加标签按钮
     new Setting(containerEl)
-      .setName("添加新分组")
+      .setName("添加新标签")
       .addButton((btn) =>
         btn
-          .setButtonText("+ 添加分组")
+          .setButtonText("+ 添加标签")
           .onClick(async () => {
-            const newGroup: GroupConfig = {
-              id: `group-${Date.now()}`,
-              name: "新分组",
-              keywords: "",
-              collapsed: false,
-              items: [],
+            const newTag: TagConfig = {
+              id: `tag-${Date.now()}`,
+              name: "新标签",
+              color: "#6b7280",
             };
-            this.plugin.settings.groups.push(newGroup);
+            this.plugin.settings.tags.push(newTag);
             await this.plugin.saveSettings();
             this.display();
           }),
       );
+
+    // 插件标签关联
+    containerEl.createEl("h3", { text: "插件标签" });
+    const manifests = (this.app as any).plugins?.manifests || {};
+
+    for (const [pluginId, manifest] of Object.entries(manifests)) {
+      const m = manifest as any;
+      const pluginTags = this.plugin.settings.pluginTags[pluginId] || [];
+
+      const row = containerEl.createDiv({ cls: "xdf-plugin-tag-row" });
+      row.createSpan({ text: m.name, cls: "xdf-plugin-tag-name" });
+
+      const tagsEl = row.createDiv({ cls: "xdf-plugin-tags" });
+      for (const tagId of pluginTags) {
+        const tag = this.plugin.settings.tags.find(t => t.id === tagId);
+        if (tag) {
+          const tagBadge = tagsEl.createSpan({ cls: "xdf-tag-badge", text: tag.name });
+          tagBadge.style.backgroundColor = tag.color + "22";
+          tagBadge.style.color = tag.color;
+          tagBadge.style.borderColor = tag.color;
+        }
+      }
+
+      // 添加标签下拉
+      const addTagSelect = tagsEl.createEl("select", { cls: "xdf-add-tag-select" });
+      addTagSelect.createEl("option", { text: "+ 添加标签", value: "" });
+      for (const tag of this.plugin.settings.tags) {
+        if (!pluginTags.includes(tag.id)) {
+          addTagSelect.createEl("option", { text: tag.name, value: tag.id });
+        }
+      }
+      addTagSelect.addEventListener("change", async () => {
+        const tagId = addTagSelect.value;
+        if (tagId) {
+          if (!this.plugin.settings.pluginTags[pluginId]) {
+            this.plugin.settings.pluginTags[pluginId] = [];
+          }
+          this.plugin.settings.pluginTags[pluginId].push(tagId);
+          await this.plugin.saveSettings();
+          this.display();
+        }
+      });
+    }
   }
 
   /** 高级设置 Tab */

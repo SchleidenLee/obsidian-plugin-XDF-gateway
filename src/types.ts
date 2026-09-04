@@ -26,6 +26,18 @@ export interface GroupItem {
   order?: number;
 }
 
+/** 标签配置 */
+export interface TagConfig {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/** 插件标签关联 */
+export interface PluginTagMap {
+  [pluginId: string]: string[]; // pluginId -> tagId[]
+}
+
 /** 插件更新信息 */
 export interface PluginUpdateInfo {
   id: string;
@@ -54,10 +66,4 @@ export interface ReleaseFiles {
   mainJs: string | null;
   manifest: string | null;
   styles: string | null;
-}
-
-/** 镜像站配置 */
-export interface MirrorConfig {
-  mirrors: string[];
-  proxyTemplate: string;
 }

@@ -4,40 +4,33 @@ import type { GroupConfig, GroupItem } from "./types";
 export class SidebarOrganizer {
   private app: App;
   private groups: GroupConfig[];
+  private pinnedPlugins: string[];
   private observer: MutationObserver | null = null;
   private originalOnOpen: (() => void) | null = null;
   private originalOnClose: (() => void) | null = null;
   private isOrganizing: boolean = false;
 
-  constructor(app: App, groups: GroupConfig[]) {
+  constructor(app: App, groups: GroupConfig[], pinnedPlugins: string[] = []) {
     this.app = app;
     this.groups = groups;
+    this.pinnedPlugins = pinnedPlugins;
   }
 
-  /**
-   * 启动分组渲染
-   * 1. monkey-patch app.setting.onOpen/onClose
-   * 2. 在 onOpen 中调用 organizeSidebar
-   * 3. 用 MutationObserver 监听侧边栏变化
-   */
   enable(): void {
     const setting = (this.app as any).setting;
     if (!setting) return;
 
-    // 保存原始 onOpen/onClose
     this.originalOnOpen = setting.onOpen;
     this.originalOnClose = setting.onClose;
 
     const self = this;
 
-    // 覆写 onOpen → 调用 organizeSidebar
     setting.onOpen = function (...args: any[]) {
       const result = self.originalOnOpen?.apply(this, args);
       self.organizeSidebar();
       return result;
     };
 
-    // 覆写 onClose → 清理 observer
     setting.onClose = function (...args: any[]) {
       if (self.observer) {
         self.observer.disconnect();
@@ -46,7 +39,6 @@ export class SidebarOrganizer {
       return self.originalOnClose?.apply(this, args);
     };
 
-    // 创建 MutationObserver 监听 .vertical-tab-header 变化
     this.observer = new MutationObserver(() => {
       if (!this.isOrganizing) {
         this.organizeSidebar();
@@ -59,14 +51,10 @@ export class SidebarOrganizer {
     }
   }
 
-  /**
-   * 停止分组渲染，恢复原始状态
-   */
   disable(): void {
     const setting = (this.app as any).setting;
     if (!setting) return;
 
-    // 恢复原始 onOpen/onClose
     if (this.originalOnOpen) {
       setting.onOpen = this.originalOnOpen;
       this.originalOnOpen = null;
@@ -76,25 +64,16 @@ export class SidebarOrganizer {
       this.originalOnClose = null;
     }
 
-    // 断开 MutationObserver
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
     }
 
-    // 移除所有注入的 DOM 元素
     const doc = this.getSettingDoc();
     doc.querySelectorAll('.xdf-folder').forEach(f => f.remove());
     doc.querySelectorAll('.xdf-hidden').forEach(h => h.classList.remove('xdf-hidden'));
   }
 
-  /**
-   * 核心：组织侧边栏
-   * 1. 找到社区插件列表容器
-   * 2. 隐藏原始 .vertical-tab-nav-item
-   * 3. 注入 <details> 分组容器
-   * 4. 在每个分组中创建 proxy button
-   */
   private organizeSidebar(): void {
     this.isOrganizing = true;
 
@@ -143,28 +122,30 @@ export class SidebarOrganizer {
 
     let ungroupedCount = 0;
 
+    // 收集每个分组匹配的插件（含置顶信息）
+    const groupMatches = new Map<number, Array<{ pluginId: string; displayName: string; isPinned: boolean; originalItem: Element }>>();
+
     // 遍历所有插件项
     pluginItems.forEach(item => {
       const settingId = item.getAttribute('data-setting-id');
       if (!settingId) return;
 
       const manifest = manifests[settingId];
-      if (!manifest) return; // 只处理社区插件
+      if (!manifest) return;
 
       const uiName = item.textContent?.trim() || manifest.name;
+      const isPinned = this.pinnedPlugins.includes(settingId);
 
       // 检查匹配哪个分组
       let matched = false;
-      for (const group of groupsMap) {
+      for (let gi = 0; gi < groupsMap.length; gi++) {
+        const group = groupsMap[gi];
         if (this.isPluginMatchedByGroup(settingId, manifest, group.data)) {
-          // 查找别名
           const alias = this.getAlias(settingId, group.data);
           const displayName = alias || uiName;
 
-          // 创建 proxy button
-          const proxy = this.createProxy(settingId, displayName, targetContainer as HTMLElement);
-          group.element.appendChild(proxy);
-          group.proxies.push({ item: { pluginId: settingId, alias }, element: proxy });
+          if (!groupMatches.has(gi)) groupMatches.set(gi, []);
+          groupMatches.get(gi)!.push({ pluginId: settingId, displayName, isPinned, originalItem: item });
 
           item.classList.add('xdf-hidden');
           matched = true;
@@ -174,10 +155,27 @@ export class SidebarOrganizer {
 
       // 未匹配的放入"其他插件"
       if (!matched) {
-        const proxy = this.createProxy(settingId, uiName, targetContainer as HTMLElement);
+        const proxy = this.createProxy(settingId, uiName, targetContainer as HTMLElement, isPinned);
         ungroupedDetails.appendChild(proxy);
         item.classList.add('xdf-hidden');
         ungroupedCount++;
+      }
+    });
+
+    // 按置顶排序后插入 proxy
+    groupsMap.forEach((group, gi) => {
+      const matches = groupMatches.get(gi) || [];
+      // 置顶的排前面
+      matches.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return a.displayName.localeCompare(b.displayName);
+      });
+
+      for (const m of matches) {
+        const proxy = this.createProxy(m.pluginId, m.displayName, targetContainer as HTMLElement, m.isPinned);
+        group.element.appendChild(proxy);
+        group.proxies.push({ item: { pluginId: m.pluginId }, element: proxy });
       }
     });
 
@@ -194,16 +192,12 @@ export class SidebarOrganizer {
       targetContainer.insertBefore(ungroupedDetails, referenceNode);
     }
 
-    // 重置标志
     if (this.observer) {
       this.observer.takeRecords();
     }
     this.isOrganizing = false;
   }
 
-  /**
-   * 关键词匹配：检查插件是否匹配分组
-   */
   private isPluginMatchedByGroup(
     pluginId: string,
     manifest: PluginManifest,
@@ -211,19 +205,14 @@ export class SidebarOrganizer {
   ): boolean {
     const keywords = this.parseKeywords(group.keywords);
 
-    // 如果 keywords 为空（"其他插件"分组），匹配所有未匹配到其它分组的插件
     if (keywords.length === 0) {
-      return false; // 这个分组由 ungroupedDetails 处理
+      return false;
     }
 
-    // 检查 manifest.name 是否包含任一关键词（不区分大小写）
     const name = manifest.name.toLowerCase();
     return keywords.some(keyword => name.includes(keyword));
   }
 
-  /**
-   * 解析关键词（支持逗号分隔）
-   */
   private parseKeywords(keywordString: string): string[] {
     if (!keywordString) return [];
     return keywordString
@@ -232,37 +221,40 @@ export class SidebarOrganizer {
       .filter(Boolean);
   }
 
-  /**
-   * 获取插件别名
-   */
   private getAlias(pluginId: string, group: GroupConfig): string | undefined {
     const item = group.items.find(i => i.pluginId === pluginId);
     return item?.alias;
   }
 
-  /**
-   * 创建 proxy button
-   */
   private createProxy(
     settingId: string,
     displayName: string,
     container: HTMLElement,
+    isPinned: boolean = false,
   ): HTMLElement {
     const doc = container.ownerDocument || document;
     const proxy = doc.createElement('div');
-    proxy.className = 'vertical-tab-nav-item xdf-proxy';
-    proxy.textContent = displayName;
+    proxy.className = `vertical-tab-nav-item xdf-proxy${isPinned ? ' xdf-pinned' : ''}`;
     proxy.setAttribute('data-setting-id', settingId);
 
-    // 点击时找到原始 item 并 click()
+    // 置顶图标
+    if (isPinned) {
+      const pinIcon = doc.createElement('span');
+      pinIcon.className = 'xdf-pin-icon';
+      pinIcon.textContent = '📌';
+      proxy.appendChild(pinIcon);
+    }
+
+    const nameSpan = doc.createElement('span');
+    nameSpan.textContent = displayName;
+    proxy.appendChild(nameSpan);
+
     proxy.onclick = (e) => {
       e.stopPropagation();
 
-      // 更新 active 状态
       container.querySelectorAll('.xdf-proxy').forEach(p => p.classList.remove('is-active'));
       proxy.classList.add('is-active');
 
-      // 找到原始 item 并点击
       const originalItem = container.querySelector(
         `.vertical-tab-nav-item[data-setting-id="${settingId}"]:not(.xdf-proxy)`
       );
@@ -274,9 +266,6 @@ export class SidebarOrganizer {
     return proxy;
   }
 
-  /**
-   * 获取设置页 document（兼容弹出窗口）
-   */
   private getSettingDoc(): Document {
     const setting = (this.app as any).setting;
     if (setting) {
@@ -286,11 +275,13 @@ export class SidebarOrganizer {
     return document;
   }
 
-  /**
-   * 更新分组配置（用户修改设置后调用）
-   */
   updateGroups(groups: GroupConfig[]): void {
     this.groups = groups;
+    this.organizeSidebar();
+  }
+
+  updatePinnedPlugins(pinned: string[]): void {
+    this.pinnedPlugins = pinned;
     this.organizeSidebar();
   }
 }
