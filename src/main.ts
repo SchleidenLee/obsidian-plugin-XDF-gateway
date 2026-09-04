@@ -8,9 +8,10 @@
  */
 
 import { Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
-import { DEFAULT_SETTINGS, type GatewaySettings } from "./settings";
+import { DEFAULT_SETTINGS, type GatewaySettings, XDF_PLUGINS } from "./settings";
 import { PluginUpdater } from "./updater";
 import { SidebarOrganizer } from "./sidebar-organizer";
+import type { GroupConfig } from "./types";
 
 export default class XdfGatewayPlugin extends Plugin {
   settings!: GatewaySettings;
@@ -21,21 +22,15 @@ export default class XdfGatewayPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
 
-    // 初始化更新器
     this.updater = new PluginUpdater(this.app, this.settings);
-
-    // 初始化侧边栏分组
     this.organizer = new SidebarOrganizer(this.app, this.settings.groups);
 
-    // 加载自定义样式
     this.loadStyles();
 
-    // Ribbon 图标 — 一键更新
     this.addRibbonIcon("refresh-cw", "XDF 一键更新", () => {
       void this.runUpdateCheck();
     });
 
-    // 命令
     this.addCommand({
       id: "xdf-check-updates",
       name: "检查 XDF 插件更新",
@@ -54,16 +49,13 @@ export default class XdfGatewayPlugin extends Plugin {
       },
     });
 
-    // 设置面板
     this.addSettingTab(new GatewaySettingTab(this.app, this));
 
-    // 启动时自动检查更新（延迟 10 秒）
     if (this.settings.autoUpdate) {
       window.setTimeout(() => { void this.runAutoUpdateCheck(); }, 10000);
       this.startUpdateTimer();
     }
 
-    // 启用设置页分组
     this.organizer.enable();
   }
 
@@ -75,7 +67,6 @@ export default class XdfGatewayPlugin extends Plugin {
     this.organizer.disable();
   }
 
-  /** 手动检查更新 */
   private async runUpdateCheck(): Promise<void> {
     new Notice("[XDF Gateway] 正在检查插件更新...");
     try {
@@ -100,7 +91,6 @@ export default class XdfGatewayPlugin extends Plugin {
     }
   }
 
-  /** 静默自动检查更新 */
   private async runAutoUpdateCheck(): Promise<void> {
     try {
       const updates = await this.updater.checkForUpdates();
@@ -118,7 +108,6 @@ export default class XdfGatewayPlugin extends Plugin {
     }
   }
 
-  /** 启动定时检查 */
   private startUpdateTimer(): void {
     if (this.updateTimer !== null) {
       window.clearInterval(this.updateTimer);
@@ -129,7 +118,6 @@ export default class XdfGatewayPlugin extends Plugin {
     }, intervalMs);
   }
 
-  /** 加载自定义 CSS */
   private async loadStyles(): Promise<void> {
     try {
       const styleEl = document.createElement("style");
@@ -165,9 +153,10 @@ export default class XdfGatewayPlugin extends Plugin {
   }
 }
 
-/** 设置面板 */
+/** 设置面板 — 带 banner 导航 */
 class GatewaySettingTab extends PluginSettingTab {
   plugin: XdfGatewayPlugin;
+  private activeTab: "plugins" | "groups" | "settings" = "plugins";
 
   constructor(app: any, plugin: XdfGatewayPlugin) {
     super(app, plugin);
@@ -178,12 +167,173 @@ class GatewaySettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // 标题
-    containerEl.createEl("h1", { text: "XDF Gateway 设置" });
+    // Banner 导航
+    const bannerEl = containerEl.createDiv({ cls: "xdf-banner-nav" });
+    const tabs = [
+      { id: "plugins" as const, label: "插件管理", icon: "puzzle" },
+      { id: "groups" as const, label: "分组设置", icon: "folder" },
+      { id: "settings" as const, label: "高级设置", icon: "settings" },
+    ];
 
-    // ── 自动更新 ──
-    containerEl.createEl("h2", { text: "自动更新" });
+    for (const tab of tabs) {
+      const btn = bannerEl.createEl("button", {
+        cls: `xdf-banner-btn ${this.activeTab === tab.id ? "is-active" : ""}`,
+        text: tab.label,
+      });
+      btn.addEventListener("click", () => {
+        this.activeTab = tab.id;
+        this.display();
+      });
+    }
 
+    // 内容区
+    const contentEl = containerEl.createDiv({ cls: "xdf-tab-content" });
+
+    switch (this.activeTab) {
+      case "plugins":
+        this.renderPluginsTab(contentEl);
+        break;
+      case "groups":
+        this.renderGroupsTab(contentEl);
+        break;
+      case "settings":
+        this.renderSettingsTab(contentEl);
+        break;
+    }
+  }
+
+  /** 插件管理 Tab */
+  private renderPluginsTab(containerEl: HTMLElement): void {
+    // XDF 插件区域
+    containerEl.createEl("h3", { text: "XDF 教学套件" });
+
+    const xdfContainer = containerEl.createDiv({ cls: "xdf-plugin-list" });
+    for (const xdfPlugin of XDF_PLUGINS) {
+      const row = xdfContainer.createDiv({ cls: "xdf-plugin-row" });
+      row.createSpan({ text: xdfPlugin.name, cls: "xdf-plugin-name" });
+      row.createSpan({ text: xdfPlugin.id, cls: "xdf-plugin-id" });
+
+      const actions = row.createDiv({ cls: "xdf-plugin-actions" });
+      actions.createEl("button", {
+        text: "更新",
+        cls: "mod-cta",
+      }).addEventListener("click", () => {
+        void this.plugin.updater.updatePlugin(xdfPlugin.id);
+      });
+    }
+
+    // 一键更新按钮
+    new Setting(containerEl)
+      .setName("一键更新所有 XDF 插件")
+      .addButton((btn) =>
+        btn
+          .setButtonText("检查并更新")
+          .setCta()
+          .onClick(() => { void this.plugin.runUpdateCheck(); }),
+      );
+
+    // 全部插件列表（按分组）
+    containerEl.createEl("h3", { text: "全部插件（按分组）" });
+    const allPluginsContainer = containerEl.createDiv({ cls: "xdf-all-plugins" });
+
+    const manifests = (this.app as any).plugins?.manifests || {};
+    const enabledPlugins = (this.app as any).plugins?.enabledPlugins || new Set();
+
+    for (const group of this.plugin.settings.groups) {
+      const groupEl = allPluginsContainer.createDiv({ cls: "xdf-group-section" });
+      const header = groupEl.createEl("details", { cls: "xdf-folder" });
+      header.open = true;
+
+      const summary = header.createEl("summary");
+      summary.textContent = group.name;
+
+      const list = header.createDiv({ cls: "xdf-plugin-list" });
+
+      // 找到匹配该分组的插件
+      const keywords = group.keywords
+        .split(",")
+        .map((k) => k.trim().toLowerCase())
+        .filter(Boolean);
+
+      for (const [pluginId, manifest] of Object.entries(manifests)) {
+        const m = manifest as any;
+        const name = m.name?.toLowerCase() || "";
+        const isMatch = keywords.length === 0
+          ? true
+          : keywords.some((kw) => name.includes(kw));
+
+        if (isMatch) {
+          const row = list.createDiv({ cls: "xdf-plugin-row" });
+          row.createSpan({ text: m.name, cls: "xdf-plugin-name" });
+          row.createSpan({ text: `v${m.version}`, cls: "xdf-plugin-version" });
+
+          const isEnabled = enabledPlugins.has(pluginId);
+          const status = row.createSpan({
+            text: isEnabled ? "已启用" : "已禁用",
+            cls: `xdf-plugin-status ${isEnabled ? "is-enabled" : "is-disabled"}`,
+          });
+        }
+      }
+    }
+  }
+
+  /** 分组设置 Tab */
+  private renderGroupsTab(containerEl: HTMLElement): void {
+    containerEl.createEl("h3", { text: "分组管理" });
+
+    for (let i = 0; i < this.plugin.settings.groups.length; i++) {
+      const group = this.plugin.settings.groups[i];
+      const groupEl = containerEl.createDiv({ cls: "xdf-group-config" });
+
+      new Setting(groupEl)
+        .setName(group.name)
+        .setDesc(`关键词：${group.keywords || "（无，匹配所有未分组插件）"}`)
+        .addText((text) =>
+          text
+            .setPlaceholder("关键词，逗号分隔")
+            .setValue(group.keywords)
+            .onChange(async (value) => {
+              this.plugin.settings.groups[i].keywords = value;
+              await this.plugin.saveSettings();
+              this.display();
+            }),
+        )
+        .addButton((btn) =>
+          btn
+            .setIcon("trash")
+            .setTooltip("删除分组")
+            .onClick(async () => {
+              this.plugin.settings.groups.splice(i, 1);
+              await this.plugin.saveSettings();
+              this.display();
+            }),
+        );
+    }
+
+    // 添加分组按钮
+    new Setting(containerEl)
+      .setName("添加新分组")
+      .addButton((btn) =>
+        btn
+          .setButtonText("+ 添加分组")
+          .onClick(async () => {
+            const newGroup: GroupConfig = {
+              id: `group-${Date.now()}`,
+              name: "新分组",
+              keywords: "",
+              collapsed: false,
+              items: [],
+            };
+            this.plugin.settings.groups.push(newGroup);
+            await this.plugin.saveSettings();
+            this.display();
+          }),
+      );
+  }
+
+  /** 高级设置 Tab */
+  private renderSettingsTab(containerEl: HTMLElement): void {
+    // 自动更新
     new Setting(containerEl)
       .setName("启用自动更新")
       .setDesc("启动时和定时检查 XDF 插件更新")
@@ -212,22 +362,7 @@ class GatewaySettingTab extends PluginSettingTab {
           }),
       );
 
-    // ── 一键操作 ──
-    containerEl.createEl("h2", { text: "操作" });
-
-    new Setting(containerEl)
-      .setName("立即检查更新")
-      .setDesc("检查所有 XDF 插件是否有新版本")
-      .addButton((button) =>
-        button
-          .setButtonText("检查更新")
-          .setCta()
-          .onClick(() => { void this.plugin.runUpdateCheck(); }),
-      );
-
-    // ── 设置页分组 ──
-    containerEl.createEl("h2", { text: "设置页分组" });
-
+    // 紧凑模式
     new Setting(containerEl)
       .setName("紧凑模式")
       .setDesc("折叠「核心插件」和「社区插件」标题，让界面更简洁")
@@ -237,7 +372,6 @@ class GatewaySettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.compactMode = value;
             await this.plugin.saveSettings();
-            // 切换 body class
             document.body.classList.toggle("xdf-compact", value);
           }),
       );
@@ -254,8 +388,8 @@ class GatewaySettingTab extends PluginSettingTab {
           }),
       );
 
-    // ── 镜像站（藏在最下面） ──
-    containerEl.createEl("h2", { text: "高级设置" });
+    // 镜像站配置（藏在最下面）
+    containerEl.createEl("h3", { text: "镜像站配置" });
 
     new Setting(containerEl)
       .setName("镜像站列表")
@@ -275,7 +409,7 @@ class GatewaySettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("代理 URL 模板")
-      .setDesc("{prefix} = 镜像前缀, {url} = 原始 URL")
+      .setDesc("{prefix} = 镜像前缀，{url} = 原始 URL")
       .addText((text) =>
         text
           .setPlaceholder("{prefix}{url}")
@@ -286,8 +420,8 @@ class GatewaySettingTab extends PluginSettingTab {
           }),
       );
 
-    // ── 关于 ──
-    containerEl.createEl("h2", { text: "关于" });
+    // 关于
+    containerEl.createEl("h3", { text: "关于" });
     containerEl.createEl("p", {
       text: `XDF Gateway v${this.plugin.manifest.version} — XDF 插件管理中枢`,
       cls: "mod-muted",

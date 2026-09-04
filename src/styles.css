@@ -1,20 +1,119 @@
-/* XDF Gateway 设置页分组样式 */
+/* XDF Gateway 设置页样式 */
 
-/* 分组容器 */
-.xdf-folder {
-  margin: 4px 0;
+/* Banner 导航 */
+.xdf-banner-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.xdf-banner-btn {
+  flex: 1;
+  padding: 8px 16px;
+  border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
   background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.xdf-banner-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.xdf-banner-btn.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* Tab 内容区 */
+.xdf-tab-content {
+  min-height: 200px;
+}
+
+/* 插件列表 */
+.xdf-plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.xdf-plugin-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--background-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.xdf-plugin-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.xdf-plugin-id {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-monospace);
+}
+
+.xdf-plugin-version {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.xdf-plugin-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.xdf-plugin-status.is-enabled {
+  background: var(--background-modifier-success);
+  color: var(--text-success);
+}
+
+.xdf-plugin-status.is-disabled {
+  background: var(--background-modifier-error);
+  color: var(--text-error);
+}
+
+.xdf-plugin-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* 分组区域 */
+.xdf-group-section {
+  margin-bottom: 12px;
+}
+
+.xdf-folder {
+  background: var(--background-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
 }
 
 .xdf-folder > summary {
   cursor: pointer;
-  padding: 6px 12px;
+  padding: 10px 14px;
   font-weight: 600;
-  font-size: var(--font-ui-small);
-  color: var(--text-muted);
+  font-size: 14px;
+  color: var(--text-normal);
   user-select: none;
   list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .xdf-folder > summary::-webkit-details-marker {
@@ -24,9 +123,9 @@
 .xdf-folder > summary::before {
   content: "▶";
   display: inline-block;
-  margin-right: 6px;
   font-size: 10px;
   transition: transform 0.15s ease;
+  color: var(--text-muted);
 }
 
 .xdf-folder[open] > summary::before {
@@ -39,9 +138,18 @@
   font-weight: 700;
 }
 
-/* Proxy 按钮 */
-.xdf-proxy {
-  padding-left: 28px !important;
+/* 分组配置 */
+.xdf-group-config {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--background-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+/* 紧凑模式 */
+.xdf-compact .vertical-tab-header-group-title {
+  display: none;
 }
 
 /* 隐藏原始插件项 */
@@ -49,31 +157,7 @@
   display: none !important;
 }
 
-/* 拖拽手柄 */
-.xdf-drag-handle {
-  cursor: grab;
-  opacity: 0.4;
-  margin-right: 4px;
-}
-
-.xdf-drag-handle:hover {
-  opacity: 1;
-}
-
-/* 拖拽中的样式 */
-.xdf-dragging {
-  opacity: 0.5;
-}
-
-.xdf-drop-target-above {
-  box-shadow: 0 -2px 0 var(--interactive-accent);
-}
-
-.xdf-drop-target-below {
-  box-shadow: 0 2px 0 var(--interactive-accent);
-}
-
-/* 紧凑模式 */
-.xdf-compact .vertical-tab-header-group-title {
-  display: none;
+/* Proxy 按钮 */
+.xdf-proxy {
+  padding-left: 28px !important;
 }
