@@ -1,7 +1,7 @@
 {
   "id": "xdf-gateway",
   "name": "XDF Gateway",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.4.0",
   "description": "XDF 插件管理中枢：自动更新、设置页分组、插件管理",
   "author": "Schleiden",
