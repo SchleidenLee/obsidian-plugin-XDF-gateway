@@ -5,6 +5,23 @@
 
 ---
 
+## 问题修复记录
+
+### 2026-09-08: 安装社区插件位置调整
+
+**问题**：「安装社区插件」输入框夹在 XDF 教学套件和「一键更新」之间，看起来像 XDF 套件的一部分。
+
+**修复**：将安装区域移到「插件分组」区域下方，与 XDF 套件明确分开。
+
+**安装走代理确认**：`installFromRepo` 调用 `grabReleaseFromRepository`，和 XDF 插件更新走同一个 `gitHubRequest`，镜像站 fallback 自动生效。
+
+### 待定事项
+
+- **内置商店代理插件**（P5）— 待做，让老师能访问 Obsidian 原生插件商店
+- **插件拖拽分组**（P3 缺口）— 待做，插件在不同分组之间拖拽移动
+
+---
+
 ## 待做事项总览
 
 | # | 功能 | 优先级 | 状态 | 说明 |
@@ -15,9 +32,83 @@
 | 4 | 内置商店代理插件 | P1 | 待做 | 老师交付必需 |
 | 5 | 打包交付脚本 | P2 | 暂缓 | 产品未完成 |
 | 6 | Ribbon 排序 | P3 | 暂缓 | 锦上添花 |
+| 7 | 统一设计语言（CSS） | P1 | 待做 | 视觉统一 |
 
 **已取消：**
 - ~~延迟加载机制~~ — 插件数量少，不需要
+
+---
+
+## 7. 统一设计语言（P1）
+
+### 需求
+所有 XDF 插件的设置页视觉风格统一（颜色、字体、间距、圆角、按钮样式），但保留各插件自己的结构（Tab 导航/线性滚动/声明式分组）。
+
+### 实现方案
+
+**7.1 创建共享 CSS 库**
+
+根目录 `shared/` 下创建两个文件：
+- `xdf-design-tokens.css` — 设计变量（颜色、间距、圆角、字体）
+- `xdf-common-styles.css` — 通用样式类（Banner、Footer、高级设置折叠区、按钮、输入框）
+
+**7.2 各插件构建时注入**
+
+各插件的 `esbuild.config.mjs` 构建时：
+1. 尝试从根目录 `../../shared/` 复制 CSS 到本地 `src/shared/`
+2. 如果根目录不存在（项目独立时），用本地副本
+3. 拼接 `tokens + common + 插件特有样式` → `dist/styles.css`
+
+**7.3 各插件 UI 改造**
+
+每个插件根目录已创建 `UI-REFACTOR.md` 记录改造方案：
+
+| 插件 | 状态 | 改动点 |
+|------|------|--------|
+| Gateway | ✅ 已完成（标准模板） | 不需要改 |
+| Toolkits | 📋 待改造 | 加 Banner/Footer，模型配置移到高级设置 |
+| ClassTracker | 📋 待改造 | 加 Banner/Footer，低频设置移到高级设置 |
+| Feedback Assistant | 📋 待改造 | 加 Banner/Footer，翻译为中文 |
+| Base | 📋 待改造 | 加 Banner/Footer，AI/数据库/打包移到高级设置 |
+| AI Chat | 📋 待改造（最复杂） | 加 Banner/Footer，13 个子模块移到高级设置 |
+
+**7.4 通用组件**
+
+```html
+<!-- Banner -->
+<div class="xdf-banner">
+  <div class="xdf-banner-icon">📅</div>
+  <div>
+    <h1 class="xdf-banner-title">XDF ClassTracker</h1>
+    <p class="xdf-banner-desc">课程追踪日历插件</p>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="xdf-footer">
+  <span class="xdf-version">v1.0.3</span>
+  <span class="xdf-author">· Schleiden</span>
+</div>
+
+<!-- 高级设置折叠区 -->
+<details class="xdf-advanced-settings">
+  <summary>高级设置</summary>
+  <div class="xdf-advanced-settings-content">
+    <!-- 各插件自己的高级设置内容 -->
+  </div>
+</details>
+```
+
+### 实施顺序
+
+1. **Gateway** — 已经是标准，不动
+2. **Toolkits** — 最简单，先改（设置项少）
+3. **ClassTracker** — 中等复杂度
+4. **Feedback Assistant** — 最简单（只有一个设置项）
+5. **Base** — 声明式架构，改动小
+6. **AI Chat** — 最复杂，最后改
+
+**预估工作量：** 每个插件 ~50 行 HTML + CSS 调整
 
 ---
 

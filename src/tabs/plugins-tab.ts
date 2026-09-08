@@ -3,6 +3,7 @@ import type { App } from "obsidian";
 import type XdfGatewayPlugin from "../main";
 import { XDF_PLUGINS } from "../settings";
 import { getPluginManager, getManifests, getEnabledPlugins } from "../obsidian-internals";
+import { openGroupEditor } from "./group-editor";
 
 /** 插件管理 Tab */
 export async function renderPluginsTab(
@@ -42,6 +43,9 @@ export async function renderPluginsTab(
     // 左侧：名称 + 描述
     const info = row.createDiv({ cls: "xdf-plugin-info" });
     info.createSpan({ text: xdfPlugin.name, cls: "xdf-plugin-name" });
+    if (m?.version) {
+      info.createSpan({ text: `v${m.version}`, cls: "xdf-plugin-version" });
+    }
     if (description) {
       info.createSpan({ text: description, cls: "xdf-plugin-desc" });
     }
@@ -120,7 +124,15 @@ export async function renderPluginsTab(
     );
 
   // 插件分组
-  containerEl.createEl("h3", { text: "插件分组" });
+  const groupHeader = containerEl.createDiv({ cls: "xdf-group-header" });
+  groupHeader.createEl("h3", { text: "插件分组" });
+  const manageBtn = groupHeader.createEl("button", {
+    text: "管理分组",
+    cls: "xdf-manage-groups-btn",
+  });
+  manageBtn.addEventListener("click", () => {
+    openGroupEditor(app, plugin, onRefresh);
+  });
   const allPluginsContainer = containerEl.createDiv({ cls: "xdf-all-plugins" });
 
   // 收集已分配到 XDF 套件的插件 ID（避免重复显示）
@@ -128,7 +140,8 @@ export async function renderPluginsTab(
   // 记录已显示过的插件 ID（避免跨分组重复显示）
   const displayedPluginIds = new Set<string>();
 
-  for (const group of plugin.settings.groups) {
+  const groups = plugin.settings.customGroups ?? plugin.settings.groups;
+  for (const group of groups) {
     // 跳过 XDF 教学套件分组（已在上方单独显示）
     if (group.id === "xdf-suite") continue;
 
@@ -217,4 +230,36 @@ export async function renderPluginsTab(
     // 记录本分组已显示的插件 ID
     matchedPlugins.forEach(p => displayedPluginIds.add(p.pluginId));
   }
+
+  // 安装社区插件（放在分组区域下方，与 XDF 套件明确分开）
+  const installSection = containerEl.createDiv({ cls: "xdf-install-section" });
+  installSection.createEl("h4", { text: "安装社区插件" });
+
+  const installRow = installSection.createDiv({ cls: "xdf-install-row" });
+  const repoInput = installRow.createEl("input", {
+    type: "text",
+    cls: "xdf-repo-input",
+    placeholder: "输入 owner/repo 或 GitHub 链接",
+  });
+
+  const installBtn = installRow.createEl("button", {
+    text: "安装",
+    cls: "xdf-install-btn",
+  });
+
+  installBtn.addEventListener("click", () => {
+    const repo = repoInput.value.trim();
+    if (!repo) {
+      new Notice("[XDF Gateway] 请输入仓库地址");
+      return;
+    }
+    const notice = new Notice(`[XDF Gateway] 正在安装 ${repo}...`, 0);
+    void plugin.updater.installFromRepo(repo).then((ok) => {
+      window.setTimeout(() => notice.hide(), 1500);
+      if (ok) {
+        repoInput.value = "";
+        onRefresh();
+      }
+    });
+  });
 }

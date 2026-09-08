@@ -435,3 +435,20 @@ export async function downloadReleaseFiles(
 
   return files;
 }
+
+// ─── 仓库地址归一化 ──────────────────────────────────────────────────────────
+
+/**
+ * 将用户输入归一化为 owner/repo 格式
+ * 支持：owner/repo、https://github.com/owner/repo、git@github.com:owner/repo.git
+ */
+export function sanitizeRepo(input: string): string {
+  let repo = (input || "").trim();
+  repo = repo.split(/[?#]/)[0];
+  repo = repo.replace(/^https?:\/\/github\.com\//i, "");
+  repo = repo.replace(/^git@github\.com:/i, "");
+  repo = repo.replace(/\.git$/i, "");
+  repo = repo.replace(/\/+$/g, "");
+  const parts = repo.split("/").filter(Boolean);
+  return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : repo;
+}

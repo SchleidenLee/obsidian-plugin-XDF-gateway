@@ -345,3 +345,155 @@
 .xdf-plugin-row.is-not-installed .xdf-plugin-name {
   opacity: 0.5;
 }
+
+/* 分组标题行 */
+.xdf-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.xdf-group-header h3 {
+  margin: 0;
+}
+
+.xdf-manage-groups-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.xdf-manage-groups-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* 分组编辑器 Modal */
+.xdf-group-editor {
+  max-width: 500px;
+}
+
+.xdf-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.xdf-group-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.xdf-drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 14px;
+  user-select: none;
+}
+
+.xdf-group-name-input {
+  width: 120px;
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+
+.xdf-group-kw-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 12px;
+}
+
+.xdf-group-delete-btn {
+  color: var(--text-error);
+  border-color: var(--background-modifier-error);
+  background: transparent;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.xdf-group-delete-btn:hover {
+  background: var(--background-modifier-error);
+  color: var(--text-on-accent);
+}
+
+.xdf-group-editor-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* 安装社区插件区域 */
+.xdf-install-section {
+  margin: 16px 0;
+  padding: 12px 14px;
+  background: var(--background-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.xdf-install-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.xdf-install-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.xdf-repo-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+
+.xdf-repo-input:focus {
+  border-color: var(--interactive-accent);
+  outline: none;
+}
+
+.xdf-install-btn {
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--interactive-accent);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.xdf-install-btn:hover {
+  opacity: 0.9;
+}

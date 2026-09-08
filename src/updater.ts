@@ -13,6 +13,7 @@ import {
   grabReleaseFromRepository,
   grabAllReleaseFiles,
   GHRateLimitError,
+  sanitizeRepo,
 } from "./github";
 import { getPluginManager } from "./obsidian-internals";
 import type { PluginInstallState, PluginUpdateInfo, ReleaseFiles } from "./types";
@@ -152,6 +153,52 @@ export class PluginUpdater {
         new Notice(
           `[XDF-Gateway] ${pluginDef.name} ${wasInstalled ? "更新失败" : "安装失败"}，请查看控制台。`,
         );
+      }
+      return false;
+    }
+  }
+
+  /**
+   * 从 GitHub 仓库安装任意插件
+   * @param repoInput - owner/repo 或 GitHub URL
+   */
+  async installFromRepo(repoInput: string): Promise<boolean> {
+    const repo = sanitizeRepo(repoInput);
+    if (!repo.includes("/")) {
+      new Notice("[XDF-Gateway] 无效的仓库地址，请使用 owner/repo 格式");
+      return false;
+    }
+
+    try {
+      const release = await grabReleaseFromRepository(repo, this.settings);
+      if (!release) {
+        new Notice(`[XDF-Gateway] 未找到 Release: ${repo}`);
+        return false;
+      }
+
+      const files = await grabAllReleaseFiles(release, this.settings);
+      if (!files.mainJs || !files.manifest) {
+        new Notice("[XDF-Gateway] Release 文件不完整，缺少 main.js 或 manifest.json");
+        return false;
+      }
+
+      const manifest = JSON.parse(files.manifest) as PluginManifest;
+      if (!manifest.id) {
+        new Notice("[XDF-Gateway] manifest.json 缺少 id 字段");
+        return false;
+      }
+
+      await this.writeReleaseFilesToPluginFolder(manifest.id, files);
+      await this.reloadPlugin(manifest.id, true);
+
+      new Notice(`[XDF-Gateway] ${manifest.name || manifest.id} 已安装至 ${release.tag_name}`, 8000);
+      return true;
+    } catch (error) {
+      if (error instanceof GHRateLimitError) {
+        new Notice(`[XDF-Gateway] GitHub API 频率限制，${error.getMinutesToReset()} 分钟后重试。`, 15000);
+      } else {
+        console.error("[XDF-Gateway] 安装插件失败:", error);
+        new Notice("[XDF-Gateway] 安装失败，请查看控制台。");
       }
       return false;
     }

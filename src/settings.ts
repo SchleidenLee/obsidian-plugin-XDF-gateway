@@ -29,6 +29,8 @@ export interface GatewaySettings {
   showUngrouped: boolean;
   /** 上次更新时间 */
   lastUpdateCheck: number;
+  /** 用户自定义分组（覆盖默认关键词匹配） */
+  customGroups: GroupConfig[] | null;
 }
 
 /** XDF 预设插件列表 */
@@ -116,4 +118,5 @@ export const DEFAULT_SETTINGS: GatewaySettings = {
   compactMode: true,
   showUngrouped: true,
   lastUpdateCheck: 0,
+  customGroups: null,
 };
