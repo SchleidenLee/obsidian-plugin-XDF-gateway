@@ -1,6 +1,6 @@
 # XDF Gateway 项目计划
 
-> 最后更新：2026-09-08
+> 最后更新：2026-10-04
 > 当前阶段：P3 缺口补全
 
 ## 定位
@@ -48,6 +48,28 @@ XDF 插件管理中枢。为新东方教师 Vault 提供：
 - `MutationObserver` 监听侧边栏 DOM
 - Proxy button 机制 + `<details>` 分组容器
 - 关键词自动匹配
+
+---
+
+### 2026-10-04 审查更正
+
+> 以下为 2026-10-04 只读审查（源码逐行核对）对既有计划结论的更正/补充，与上文冲突处以本节为准，详见 PENDING.md「代码审查整改计划（2026-10-04）」。
+
+> **「镜像站 URL 重写策略 ✅ 已实现」存疑**：`settings.proxyTemplate`（默认 `{prefix}{url}`，`settings.ts:115`）从未被 `gitHubRequest` 读取，模板实际由 `mirrors` 列表经 `rewriteGithubUrl`（`github.ts:115-125`）处理；默认 `{url}` 直接替换为未编码 URL，`requestUrl` 会得到非法 URL，镜像 fallback 很可能整体失效——需实测确认（`settings-tab.ts:99-109`、`github.ts:115-125, 228-239`）。
+
+> **「文件下载策略 ✅ 已实现」不完整**：无任何哈希/签名/来源校验，且当 `main.js` 有、`manifest` 为 null 时会把空 `manifest.json` 写入已有插件目录（`updater.ts:253-254`、`github.ts:429-433`）；「安装任意插件」路径缺 `manifest.id` 净化，存在路径穿越（`updater.ts:185-189, 244-246`）。
+
+> **「reloadPlugin — 插件热重载」存在缺陷**：`reloadPlugin`（`updater.ts:260-273`）无 try/catch 与失败回滚，`disablePlugin`/`loadPlugin` 异常被空 catch 静默吞掉，写盘成功后可能未启用却仍报成功。
+
+> **`installFromRepo` 恒强制启用**：`updater.ts:196` 传 `forceEnable=true`，覆盖安装已禁用插件会被意外启用，破坏用户状态选择。
+
+> **两个设置项实为无效**：`compactMode` 只在切换时 toggle body class，`onload` 不应用（`settings-tab.ts:63`、`main.ts:25-65`、`styles.css:319`）；`showUngrouped` 从未被 `sidebar-organizer.ts` 读取，「其他插件」分组无条件生成（`settings-tab.ts:67-77`、`sidebar-organizer.ts:117-122, 191-194`）。
+
+> **「消除散落的 `(app as any)`」未贯彻**：`main.ts:162` 直连 `loadData()`，tabs 仍用 `manifests[...] as any`（`plugins-tab.ts:37,171,283`、`tags-tab.ts:96`），与「唯一允许 as any 的地方」不符。
+
+> **文档行号漂移**：本文件称 `main.ts` 239 行，实际磁盘为 238 行。
+
+> **`XDF_PLUGINS` id 一致性待确认**：表中 6 个 id 是否与各插件实际 `manifest.id` 一致无法从本仓库确证，若不一致会导致更新检查把已装插件误判为未安装并重复覆盖（`settings.ts:39-46`）。[待确认]
 
 ---
 

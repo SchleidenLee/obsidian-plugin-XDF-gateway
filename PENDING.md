@@ -1,7 +1,7 @@
 # XDF Gateway 后续实现计划 — PENDING
 
 > 基于 PLAN.md 中未完成项 + 新发现问题，逐项分析实现方案。
-> 最后更新：2026-09-08
+> 最后更新：2026-10-04
 
 ---
 
@@ -14,6 +14,30 @@
 **修复**：将安装区域移到「插件分组」区域下方，与 XDF 套件明确分开。
 
 **安装走代理确认**：`installFromRepo` 调用 `grabReleaseFromRepository`，和 XDF 插件更新走同一个 `gitHubRequest`，镜像站 fallback 自动生效。
+
+### 2026-09-08: 插件来源字段 + 第三方插件分组
+
+**新增**：
+- `GatewaySettings.pluginSources` 字段：`{ [pluginId: string]: "store" | "github" }`
+- `installFromRepo` 安装后自动标记 `pluginSources[id] = "github"`
+- 分组列表中 GitHub 来源插件显示「GitHub」小标签
+- 「第三方插件」固定分组：展示所有 GitHub 来源插件，不受去重限制
+
+**BRAT 参考**：BRAT 的 Beta 插件列表显示 repo 链接 + 版本号 + 操作按钮，但没有来源概念。我们的设计更简单：来源标记 + 独立分组。
+
+---
+
+### 2026-09-08: BRAT 第三方插件管理参考
+
+**BRAT 的 Beta 插件列表模式**（SettingsTab.ts L230-310）：
+- 每个插件显示：repo 链接（可点击）+ 版本号 + 描述
+- 操作按钮：复制 repo ID / 更新 / 编辑版本 / 删除
+- 列表顶部有「+」按钮添加新插件
+- 支持冻结版本（frozen version）
+
+**我们的差异**：
+- BRAT 只管理 beta 插件，我们管理所有第三方 GitHub 安装插件
+- BRAT 没有「来源」概念，我们需要区分「官方商店」vs「GitHub 安装」
 
 ### 待定事项
 
@@ -396,3 +420,120 @@ ribbonOrder: string[];  // Ribbon 插件 ID 排序列表
 6. ~~批量启用/禁用~~ — 已取消
 7. **打包交付**（P2，产品完成后）
 8. **Ribbon 排序**（P3，锦上添花）
+
+---
+
+## 代码审查整改计划（2026-10-04）
+
+### 来源说明
+
+本次为只读代码审查（不修改任何源码），逐行核对以下文件的磁盘内容，文中行号均以当前磁盘源码为准：
+
+- `src/main.ts`（插件入口 / SettingTab 路由 / 更新检查 / Ribbon 命令）
+- `src/github.ts`（GitHub API 通信 / 镜像站 URL 重写与 fallback / 错误类 / sanitizeRepo / semver）
+- `src/updater.ts`（插件更新与安装引擎 / 文件写入 / reloadPlugin）
+- `src/settings.ts`（配置管理 / XDF_PLUGINS / DEFAULT_GROUPS）
+- `src/sidebar-organizer.ts`（设置页 DOM hack / MutationObserver / monkey-patch）
+- `src/obsidian-internals.ts`（内部 API 封装）
+- `src/tabs/plugins-tab.ts`、`src/tabs/tags-tab.ts`、`src/tabs/settings-tab.ts`、`src/tabs/group-editor.ts`
+- `src/types.ts`、`src/styles.css`
+
+注明 `[待确认]` 的条目表示无法仅凭当前源码确证，需要运行时或跨仓库验证。
+
+### 严重
+
+- [ ] **curl 语义的 `{url}` 模板导致镜像请求 URL 非法** — `src/tabs/settings-tab.ts:99-109`，`src/settings.ts:115`
+  - 现象：设置页把 `{prefix}` 描述为镜像前缀，但 `gitHubRequest` 从不读取 `settings.proxyTemplate`（全仓库仅设置页与 settings.ts 引用该字段，见 `settings.ts:17`、`settings.ts:115`、`settings-tab.ts:104-106`）；`rewriteGithubUrl`（`src/github.ts:115-125`）只把 `{url}` 直接替换为**未编码**原始 URL 并返回，随后 `requestUrl` 会把 `"https://gh-proxy.com/https://api.github.com/..."` 拆成协议 `https:`、主机 `gh-proxy.com`、路径 `/https://api.github.com/...`，而 `gh-proxy.com` 实际是 curl 风格（期望 `/https://github.com/...` 作为 `:url` 参数）。
+  - 影响：默认镜像模板未经过 `{encodedUrl}` 分支，镜像 fallback 很可能整体失效或返回错误页面，与「镜像站自动 fallback」的宣称不符。
+  - 修复方向：默认模板改为 `{encodedUrl}` 风格并让 `gitHubRequest` 真正消费 `proxyTemplate`；或按镜像站类型区分 curl 风格与前缀风格；补一组镜像连通性测试。
+
+- [ ] **镜像重写后不校验最终 host，存在 SSRF 面** — `src/github.ts:115-125`，`src/github.ts:228-239`
+  - 现象：镜像列表来自用户可编辑的设置文本域（`settings-tab.ts:82-96`），`rewriteGithubUrl` 只判断入参是否为 GitHub 域名，对 `proxy` 无任何 host 白名单校验；`{url}` 模板返回 `proxy.replace(...)`、前缀模式返回 `${prefix}/${url}`，最终 URL 的 host 完全由镜像配置决定。搭配 `Authorization: token ...` 头（`github.ts:190-192`）被带到重写后的 host。
+  - 影响：任意镜像可将请求指向任意主机（SSRF），或在非 GitHub 主机上接收用户 GitHub Token。
+  - 修复方向：对重写后的最终 URL 做 host 白名单/协议校验；Token 只发送给 github.com 官方 host，镜像请求剥离 Authorization。
+
+### 高
+
+- [ ] **安装流程无 manifest.id 校验，可路径穿越写任意目录** — `src/updater.ts:165-209`，`src/updater.ts:240-258`
+  - 现象：`installFromRepo` 只校验 `!manifest.id` 是否存在（`updater.ts:185-189`），随后把 `manifest.id` 直接拼进路径：`${configDir}/plugins/${manifest.id}`（`updater.ts:244-246`）。`writeReleaseFilesToPluginFolder` 与 `getLocalVersion`（`updater.ts:281-284`）均无净化。若 Release 中 `manifest.json` 的 `id` 为 `../../任意路径`，写入路径会逃出 `.obsidian/plugins/`。
+  - 影响：来自任意 GitHub 仓库的 Release 可向 Vault 内任意相对路径写入 `main.js`/`manifest.json`，构成路径穿越。
+  - 修复方向：对 `manifest.id`/插件 id 做白名单净化（仅 `[A-Za-z0-9._-]`，禁止 `.`、`/`、`\`），写入前 `normalizePath` 后校验前缀必须是 plugins 目录；拒绝非法 id。
+
+- [ ] **下载缺少内容完整性校验，且单文件失败导致半损坏目录** — `src/github.ts:169-171, 405-437`，`src/updater.ts:240-258`
+  - 现象：全仓库无任何哈希/签名校验；写入侧直接把 `files.mainJs ?? ""`、`files.manifest ?? ""` 落盘（`updater.ts:253-254`）。当 `main.js` 非空但 `manifest` 为 `null` 时（`downloadReleaseFiles` 的 `files = {mainJs, manifest: null, ...}` 场景，`github.ts:429-433`），会把 `main.js` 与**空** `manifest.json` 写进已有插件目录。
+  - 影响：无完整性校验易受中间人/镜像内容篡改；失败路径会产生 `manifest.json` 为空、插件无法加载或从列表消失的损坏目录。
+  - 修复方向：写入前对 manifest 做 `JSON.parse` 校验（含 `id`/`version`/`main`）；内容不一致时先写临时目录再原子替换；记录并校验 `sha256`/`digest`（Release asset 的 `digest` 字段）。
+
+- [ ] **`reloadPlugin` 无失败回滚，disable 失败被静默吞掉** — `src/updater.ts:260-273`
+  - 现象：`loadManifests`、`loadPlugin`、`enablePluginAndSave` 均无 try/catch；`disablePlugin` 的异常被空 catch 吞掉（`updater.ts:263-265`），`loadPlugin?.` 的异常也被空 catch 吞掉（`updater.ts:269-271`）。文件已写盘、`manifest.version` 已变新，但插件可能停留在 disable 态或加载失败。
+  - 影响：更新「成功」后插件实际未启用，用户看不到失败提示（Notice 仍报成功）。
+  - 修复方向：`reloadPlugin` 捕获并向上抛出/上报错误，返回成功布尔；失败时回滚到更新前状态（备份旧文件）并明确提示。
+
+- [ ] **请求缓存不区分布局/镜像/状态，可能返回过期或错误内容** — `src/github.ts:157-169, 200-201`
+  - 现象：缓存 key 仅为 `options.url`，不包含 headers、镜像来源、是否虽 404 也缓存；任何 2xx 响应（含镜像返回的 HTML 错误页）都会被 `setCache` 缓存 5 分钟（`github.ts:210-212`）。
+  - 影响：更新检查与手动更新可能拿到上一次的响应；镜像返回的伪 2xx HTML 被当作文件内容缓存并写入。
+  - 修复方向：缓存 key 加入 GitHub Token 指纹与镜像标识；下载类请求禁用缓存或校验 `Content-Type`/文件结构。
+
+- [ ] **镜像 fallback 不覆盖 Raw Tag 回退路径的错误处理与并发** — `src/github.ts:381-399`，`src/updater.ts:225-232`
+  - 现象：`fetchRawFromTag` 的循环内 catch 静默 `continue`（`github.ts:396-397`），无法区分 404 与镜像故障；`updateAll` 为串行 for-await 无去重、无互斥，同一插件可被并发触发（如 UI 单个「更新」按钮 `plugins-tab.ts:99-110` 与「一键更新」`plugins-tab.ts:114-124` 同时触发）。另外 `writeReleaseFilesToPluginFolder` 是 public（`updater.ts:240`），多处入口（`plugins-tab.ts` 的 Toggle/安装）都能在监听器存续期内于重渲染后重复触发，`display()` 重渲染（`main.ts:200-237`）不会移除旧监听器。
+  - 影响：并发写同一插件目录产生竞态；重渲染泄漏的监听器导致重复请求/重复弹窗。
+  - 修复方向：为每个 pluginId 加 in-flight 互斥（Promise map）；区分可重试错误与永久错误；`display()` 重渲染前清理旧监听器/observer（见「低」档 DOM 条目）。
+
+### 中
+
+- [ ] **版本比较忽略预发布/构建元数据，且非法输入语义错误** — `src/github.ts:129-148`，`src/updater.ts:297-306`
+  - 现象：`compareVersions` 用 `a.split('.')` 后 `parseInt`，`1.2.3-beta.1` → `[1,2,3,NaN→0,1]`，`1.2.3` → `[1,2,3]`，二者比较得 0，无法区分；`semverCoerce('1.2.3-beta.1')` 返回 `"1.2.3"`（`github.ts:145-147` 只抓前三段数字），预发布信息被丢弃。`isNewerVersion` 在两侧都能 coerce 时用数值比较，无法 coerce 时退化为 `local !== remote`（`updater.ts:305`），即版本号只差一个字符也会被判定为「有更新」。
+  - 影响：预发布版本判断错误；`v1.2.3` 与 `1.2.3` 被 coerce 后相同尚可，但 `latest-1` 等非标准 tag 会持续误报更新。
+  - 修复方向：实现完整 semver（含预发布优先级）或引入成熟比较库；`isNewerVersion` 的 fallback 分支改为保守（无法判定时不更新）。
+
+- [ ] **镜像 URL 模板边界：对 `{prefix}`/`{encodedUrl}` 前缀模式解析不一致** — `src/github.ts:115-125`
+  - 现象：前缀模式用 `proxy.replace(/\/+$/g, "")` 去掉尾部斜杠后直接拼接，若 `proxy` 本身已是完整 URL 模板（如以 `?url=` 结尾），会拼出非法 URL；`encodeURIComponent`（`github.ts:118`）不会编码 `.`/`-`/`_`/`~`，对 `api.github.com` 这类 URL 无影响，但对查询串类模板无保护；未处理镜像模板中同时含 `{url}` 与 `{encodedUrl}` 时 `{url}` 分支优先的歧义。另 `{prefix}` 占位符（`settings-tab.ts:100` 描述）在 `rewriteGithubUrl` 中根本没有对应替换分支。
+  - 影响：部分镜像模板格式解析边界不正确；文档/UI 描述的 `{prefix}` 实际不被支持。
+  - 修复方向：明确并统一模板契约（只支持 `{url}`/`{encodedUrl}`/前缀 3 种），移除或实现 `{prefix}`；增加 URL 合法性校验。
+
+- [ ] **`XDF_PLUGINS` 与实际插件 id 是否一致需核对** — `src/settings.ts:39-46`，`src/main.ts:33-34`
+  - 现象：`checkForUpdates`/`updatePlugin` 依赖 `XDF_PLUGINS[].id` 与本地 `configDir/plugins/<id>/manifest.json` 匹配（`updater.ts:281-284`）。`xdf-toolkits`/`xdf-aichatbot` 的仓库名（`...XDF-tookits`、`...XDF-AIchatbot`）与 id 命名规则不同，且表中 `xdf-base` 等 id 是否与各插件 `manifest.json` 的 `id` 一致无法从本仓库确证。
+  - 影响：若 id 与各插件实际 manifest id 不一致，更新检查会把已安装插件误判为「未安装」并重复安装/覆盖。
+  - 修复方向：在各插件仓库确认 `manifest.id`，或改为从远端 manifest 读取 id 后再与本地比对。[待确认]
+
+- [ ] **更新后已启用状态保留存在缺口（未安装→安装路径）** — `src/updater.ts:114, 138, 260-268`
+  - 现象：`updatePlugin` 在安装前用 `wasInstalled` 记录是否已装（`updater.ts:114`），对未安装的插件调用 `reloadPlugin(pluginId, true)`（`updater.ts:138`）强制启用。这意味着覆盖安装一个**用户主动禁用**的插件时，`forceEnable` 只在 `!wasInstalled` 时为真，禁用状态可保留，逻辑正确；但 `installFromRepo` 恒传 `forceEnable=true`（`updater.ts:196`），对已存在且被禁用的插件会强制启用，破坏用户选择。
+  - 影响：通过「安装社区插件」覆盖一个已禁用插件会将其意外启用。
+  - 修复方向：`installFromRepo` 先读取 `getInstallState`，已安装则沿用其 enabled/disabled 状态，仅未安装时才 forceEnable。
+
+- [ ] **`compactMode` 仅在切换时生效，启动不应用；`showUngrouped` 完全未使用** — `src/tabs/settings-tab.ts:54-77`，`src/styles.css:319`，`src/sidebar-organizer.ts`
+  - 现象：`.xdf-compact` 类只在 `onChange` 里 `document.body.classList.toggle`（`settings-tab.ts:63`），`onload`（`main.ts:25-65`）从不按 `settings.compactMode` 应用，因此重启后紧凑模式失效；`showUngrouped` 仅被写入与读取设置值（`settings.ts:29,121`、`settings-tab.ts:72-76`），`sidebar-organizer.ts` 中「其他插件」分组无条件生成（`sidebar-organizer.ts:117-122, 191-194`），开关无效。
+  - 影响：两个设置项对用户表现为「无效」；紧凑模式状态不持久。
+  - 修复方向：`onload` 与 `saveSettings` 中同步 body class；`showUngrouped` 接入 `organizeSidebar` 条件渲染。
+
+- [ ] **`reloadPlugin` 与安装流程可能整体不可用（getPluginManager 可能为 undefined）** — `src/obsidian-internals.ts:25-27`，`src/updater.ts:261`
+  - 现象：`getPluginManager` 直接返回 `(app as any).plugins`，若内部 API 变更或对象尚未就绪则为 `undefined`，调用 `plugins.enabledPlugins.has`（`updater.ts:262`）会抛 TypeError，而该异常不在 `reloadPlugin` 的处理范围内。
+  - 影响：Obsidian 版本升级导致内部 API 变化时，更新/安装整体失败且错误信息不明确。
+  - 修复方向：`getPluginManager` 增加存在性校验并抛出可读错误；`reloadPlugin`/`getInstallState` 捕获并降级。
+
+### 低
+
+- [ ] **`App` 的 `as any` 边界已被突破，绕过封装层** — `src/main.ts:162`，`src/obsidian-internals.ts:25-27`
+  - 现象：`obsidian-internals.ts` 声称「唯一允许 `as any` 的地方」（PLAN.md L164），但 `main.ts:162` 直接用 `await this.loadData()`（未走封装）且各处 tabs 仍在用 `manifests[...] as any`（`plugins-tab.ts:37,171,283`、`tags-tab.ts:96`）访问内部 manifest。
+  - 影响：类型安全边界被反复绕过，后续 API 变更难以集中修复。
+  - 修复方向：统一封装 `loadData`/manifest 访问到 `obsidian-internals.ts`；tabs 只依赖封装后的类型。
+
+- [ ] **DOM 选择器与接口脆弱，`activeTab` 类型与内部接口不一致** — `src/sidebar-organizer.ts:49,82,93,259-261`，`src/obsidian-internals.ts:46-54`
+  - 现象：`.vertical-tab-header-group-items[data-section="community-plugins"]`、`.vertical-tab-nav-item`、`[data-setting-id]` 等选择器无版本适配；`createProxy` 的 `querySelector` 用 `data-setting-id="${settingId}"` 插值（`sidebar-organizer.ts:259-261`），若 id 含引号会破坏选择器。`SettingLike.activeTab?: unknown` 与内部实际类型不符。
+  - 影响：Obsidian 更新时分组注入静默失效（`organizeSidebar` 找不到容器即 return，`sidebar-organizer.ts:84-87`）；偶发选择器注入问题。
+  - 修复方向：集中维护选择器常量并加 `[待确认]` 版本适配；用 `CSS.escape` 处理属性值；收紧 `activeTab` 类型或移除。
+
+- [ ] **`display()` 重渲染的监听器/observer 未清理，console 噪声** — `src/main.ts:200-237`，`src/sidebar-organizer.ts:43-53, 196-198`
+  - 现象：`display()` 每次 `containerEl.empty()` 后重建，旧 DOM 上的 `addEventListener` 随之移除（内存本身不泄漏），但 `SidebarOrganizer` 的 MutationObserver 在 `enable()` 时 observe（`sidebar-organizer.ts:43-53`）并在回调里调用 `organizeSidebar`，而 `organizeSidebar` 自身写 DOM 又会触发 observer——虽有 `isOrganizing` 守卫与 `takeRecords`（`sidebar-organizer.ts:44,196-198`），频繁重渲染仍可能引起重复组织；`GitHubResponseError` 双层包装（`github.ts:39-45`）在 404 分支会产生嵌套错误信息，`grabReleaseFromRepository` 的 `catch` 与后续 `response.status === 404` 判断（`github.ts:271-277`）存在死分支。
+  - 影响：轻微性能/日志噪声；错误信息可读性差。
+  - 修复方向：`organizeSidebar` 用 `requestAnimationFrame`/debounce 合并；精简 `GitHubResponseError` 包装与不可达分支。
+
+- [ ] **`updateInterval` 无限定时器与文档不一致** — `src/main.ts:137-145, 181-186`，`src/tabs/settings-tab.ts:23-37`
+  - 现象：`updateInterval` 单位为分钟但客户端无上限校验（`settings-tab.ts:31-35` 仅要求 `>0`），极大值可设置超长定时器；`startUpdateTimer` 在 `saveSettings` 中每次都会重建 interval（`main.ts:181-186`），与 `onload` 中的 `setTimeout(10000)` 首次检查叠加，可能造成重复检查。
+  - 影响：定时任务重复触发或行为与设置描述不符。
+  - 修复方向：对 `updateInterval` 设上限（如 1–1440）；`startUpdateTimer` 幂等化（值未变则不重建）。
+
+- [ ] **文档/实现细节需更正** — `PLAN.md:153`，`src/main.ts:200-237`
+  - 现象：PLAN.md 称 `main.ts` 为 239 行，当前磁盘为 238 行（`GatewaySettingTab` 在此定义）；本次审查发现多处「已完成」项实为存疑（见 PLAN.md 追加小节）。
+  - 影响：文档与代码漂移，误导后续维护。
+  - 修复方向：同步文档行号与状态标注。
