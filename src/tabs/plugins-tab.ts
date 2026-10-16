@@ -196,6 +196,10 @@ export async function renderPluginsTab(
       const info = row.createDiv({ cls: "xdf-plugin-info" });
       info.createSpan({ text: m.name, cls: "xdf-plugin-name" });
       info.createSpan({ text: `v${m.version}`, cls: "xdf-plugin-version" });
+      const source = plugin.settings.pluginSources[pluginId];
+      if (source === "github") {
+        info.createSpan({ text: "GitHub", cls: "xdf-plugin-source" });
+      }
       if (description) {
         info.createSpan({ text: description, cls: "xdf-plugin-desc" });
       }
@@ -254,12 +258,70 @@ export async function renderPluginsTab(
       return;
     }
     const notice = new Notice(`[XDF Gateway] 正在安装 ${repo}...`, 0);
-    void plugin.updater.installFromRepo(repo).then((ok) => {
+    void plugin.updater.installFromRepo(repo).then(async (ok) => {
       window.setTimeout(() => notice.hide(), 1500);
       if (ok) {
         repoInput.value = "";
+        await plugin.saveSettings();
         onRefresh();
       }
     });
   });
+
+  // 第三方插件（不受去重限制，所有 GitHub 来源的插件都显示在这里）
+  const githubPluginIds = Object.entries(plugin.settings.pluginSources)
+    .filter(([_, source]) => source === "github")
+    .map(([id]) => id);
+
+  if (githubPluginIds.length > 0) {
+    const thirdPartyHeader = containerEl.createDiv({ cls: "xdf-group-header" });
+    thirdPartyHeader.createEl("h3", { text: "第三方插件" });
+
+    const thirdPartyContainer = containerEl.createDiv({ cls: "xdf-plugin-list" });
+
+    for (const pluginId of githubPluginIds) {
+      const manifest = manifests[pluginId] as any;
+      if (!manifest) continue;
+
+      const isEnabled = enabledPlugins.has(pluginId);
+      const description = manifest.description || "";
+
+      const row = thirdPartyContainer.createDiv({ cls: "xdf-plugin-row" });
+
+      const info = row.createDiv({ cls: "xdf-plugin-info" });
+      info.createSpan({ text: manifest.name, cls: "xdf-plugin-name" });
+      info.createSpan({ text: `v${manifest.version}`, cls: "xdf-plugin-version" });
+      // 来源标记
+      info.createSpan({ text: "GitHub", cls: "xdf-plugin-source" });
+      if (description) {
+        info.createSpan({ text: description, cls: "xdf-plugin-desc" });
+      }
+
+      const actions = row.createDiv({ cls: "xdf-plugin-actions" });
+      const toggleLabel = actions.createEl("label", { cls: "xdf-toggle-switch" });
+      const toggleInput = toggleLabel.createEl("input", {
+        type: "checkbox",
+        cls: "xdf-toggle-input",
+      });
+      toggleInput.checked = isEnabled;
+      toggleLabel.createSpan({ cls: "xdf-toggle-slider" });
+
+      toggleInput.addEventListener("change", async () => {
+        const wantEnable = toggleInput.checked;
+        try {
+          if (wantEnable) {
+            await pluginManager.enablePluginAndSave(pluginId);
+            new Notice(`[XDF Gateway] 已启用 ${manifest.name}`);
+          } else {
+            await pluginManager.disablePluginAndSave(pluginId);
+            new Notice(`[XDF Gateway] 已禁用 ${manifest.name}`);
+          }
+        } catch (error) {
+          toggleInput.checked = !wantEnable;
+          console.error(`[XDF Gateway] 切换插件状态失败: ${pluginId}`, error);
+          new Notice(`[XDF Gateway] 操作失败，请查看控制台`);
+        }
+      });
+    }
+  }
 }

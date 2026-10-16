@@ -31,6 +31,8 @@ export interface GatewaySettings {
   lastUpdateCheck: number;
   /** 用户自定义分组（覆盖默认关键词匹配） */
   customGroups: GroupConfig[] | null;
+  /** 插件来源：store = 官方商店，github = 第三方 GitHub 安装 */
+  pluginSources: { [pluginId: string]: "store" | "github" };
 }
 
 /** XDF 预设插件列表 */
@@ -119,4 +121,5 @@ export const DEFAULT_SETTINGS: GatewaySettings = {
   showUngrouped: true,
   lastUpdateCheck: 0,
   customGroups: null,
+  pluginSources: {},
 };

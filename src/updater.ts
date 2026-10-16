@@ -189,6 +189,10 @@ export class PluginUpdater {
       }
 
       await this.writeReleaseFilesToPluginFolder(manifest.id, files);
+
+      // 标记为 GitHub 来源
+      this.settings.pluginSources[manifest.id] = "github";
+
       await this.reloadPlugin(manifest.id, true);
 
       new Notice(`[XDF-Gateway] ${manifest.name || manifest.id} 已安装至 ${release.tag_name}`, 8000);
